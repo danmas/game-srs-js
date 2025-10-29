@@ -67,8 +67,49 @@ export class AILogger {
         if (wasLogged) {
             const timestamp = new Date().toLocaleTimeString();
             const ownerInfo = `${owner.entityType} ${owner.id}`;
-            const message = `[${timestamp}] [${ownerInfo}] [${strategyName}] | Decision: ${decision} | Reason: ${reason}`;
+            let message = `[${timestamp}] [${ownerInfo}] [${strategyName}] | Decision: ${decision} | Reason: ${reason}`;
+            
+            // Создаем полную копию контекста для логирования
+            const fullContext = context ? {...context} : {};
+            
+            // Добавляем контекст, если он есть и не пустой
+            if (fullContext && Object.keys(fullContext).length > 0) {
+                try {
+                    // Создаём безопасную копию контекста без проблемных свойств
+                    const safeContext = {...fullContext};
+                    
+                    // Удаляем свойства, которые могут содержать циклические ссылки
+                    if (safeContext.scene) delete safeContext.scene;
+                    if (safeContext.sys) delete safeContext.sys;
+                    
+                    // Обрабатываем свойство perceivedTargets, если оно есть
+                    if (safeContext.perceivedTargets) {
+                        // Преобразуем в безопасный формат с минимальной нужной информацией
+                        if (Array.isArray(safeContext.perceivedTargets)) {
+                            safeContext.perceivedTargets = safeContext.perceivedTargets.map(t => 
+                                typeof t === 'object' ? { id: t.id, type: t.type } : t
+                            );
+                        } else if (safeContext.perceivedTargets instanceof Map) {
+                            safeContext.perceivedTargets = '[Map]';
+                        }
+                    }
+                    
+                    message += ` | Context: ${JSON.stringify(safeContext)}`;
+                } catch (error) {
+                    message += ` | Context: (circular structure, cannot stringify)`;
+                    console.warn("Failed to stringify context in AILogger:", error);
+                }
+            }
+            
             this.logMessage(message);
+            
+            // Дополнительно логируем напрямую через UniversalLogger с тегом AI_DECISION
+            UniversalLogger.log(`${decision}: ${reason}`, `AI_DECISION_${ownerInfo}`, level, {
+                ...fullContext,
+                entityId: owner.id,
+                entityType: owner.entityType,
+                strategy: strategyName
+            });
         }
     }
 

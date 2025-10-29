@@ -472,17 +472,25 @@ export class MainScene extends Phaser.Scene {
    * @param time Текущее время
    */
   private slowLoop(time: number): void {
-    // Определяем, с чьей точки зрения обновляем сенсоры
-    const perceivingShip = this.selectedVehicleForInformer || this.myShip;
+    const allVehicles: Vehicle[] = [
+      ...this.redShips,
+      ...this.whiteShips,
+      ...this.redTorpedos,
+      ...this.whiteTorpedos
+    ].filter(v => v.active);
 
-    if (perceivingShip) {
-      const allVehicles: Vehicle[] = [
-        ...this.redShips,
-        ...this.whiteShips,
-        ...this.redTorpedos,
-        ...this.whiteTorpedos
-      ].filter(v => v.active); // Передаем только активные для оптимизации
-      perceivingShip.updateSensors(allVehicles, time, this.informer);
+    // Обновляем сенсоры для КАЖДОГО активного корабля
+    for (const vehicle of allVehicles) {
+      // Корабли и подлодки имеют сенсоры, торпеды - нет (у них своя логика)
+      if (vehicle instanceof Ship) {
+        vehicle.updateSensors(allVehicles, time, null); // null, так как сообщения в информер нужны только от корабля игрока
+      }
+    }
+    
+    // Определяем, с чьей точки зрения обновляем информер
+    const shipForInformer = this.selectedVehicleForInformer || this.myShip;
+    if (shipForInformer) {
+        // Логика ниже теперь только обновляет информер, не вызывая updateSensors повторно
     }
 
     // Обновление информера

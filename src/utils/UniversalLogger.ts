@@ -38,7 +38,7 @@ export class UniversalLogger {
     
     // Настройки логирования по умолчанию
     private static settings: LogSettings = {
-        minLevel: LogLevel.INFO,
+        minLevel: LogLevel.DEBUG,
         enableConsole: true,
         enableLocalStorage: true,
         enableServer: true,
@@ -221,7 +221,24 @@ export class UniversalLogger {
                 message,
                 ...(context || {})
             };
-            formattedMessage = JSON.stringify(logData);
+            try {
+                formattedMessage = JSON.stringify(logData);
+            } catch (e) {
+                if (e instanceof Error && e.message.includes('circular structure')) {
+                    console.warn('Circular structure detected in log data. Using simplified format.');
+                    // Создаём упрощённую версию без циклических ссылок
+                    const safeLogData = {
+                        timestamp,
+                        tag,
+                        level: levelStr,
+                        message,
+                        circular_structure_error: true
+                    };
+                    formattedMessage = JSON.stringify(safeLogData);
+                } else {
+                    throw e;
+                }
+            }
         } else {
             formattedMessage = `[${timestamp}] [${tag}] [${levelStr}] ${message}`;
         }

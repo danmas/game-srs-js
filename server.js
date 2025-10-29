@@ -5,6 +5,20 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3101;
 
+// --- Генерация имени файла лога при старте сервера ---
+const getLogFileName = () => {
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const seconds = date.getSeconds().toString().padStart(2, '0');
+  return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}.log`;
+};
+const logFileName = getLogFileName();
+// ----------------------------------------------------
+
 // Папка для хранения логов
 const LOGS_DIR = path.join(__dirname, 'logs');
 
@@ -34,7 +48,7 @@ app.post('/api/logs', (req, res) => {
   console.log('Получен запрос на сохранение лога:', req.method, req.url);
   console.log('Заголовки:', JSON.stringify(req.headers, null, 2));
   
-  const { message, tag, level, timestamp } = req.body;
+  const { message, tag, level, timestamp, context } = req.body;
   
   // Проверка обязательных полей
   if (!message) {
@@ -42,13 +56,24 @@ app.post('/api/logs', (req, res) => {
     return res.status(400).send('Отсутствует обязательное поле message');
   }
   
-  // Формируем имя файла по дате
-  const date = new Date(timestamp || new Date());
-  const fileName = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}.log`;
-  const filePath = path.join(LOGS_DIR, fileName);
+  // Используем имя файла, сгенерированное при старте сервера
+  const filePath = path.join(LOGS_DIR, logFileName);
   
   // Формируем строку лога
-  const logEntry = `[${timestamp || new Date().toISOString()}] [${tag || 'LOG'}] [${level || 'INFO'}] ${message}\n`;
+  let logEntry = `[${timestamp || new Date().toISOString()}] [${tag || 'LOG'}] [${level || 'INFO'}] ${message}`;
+
+  // Добавляем контекст, если он есть и не пустой
+  if (context && Object.keys(context).length > 0) {
+    try {
+      // Преобразуем контекст в удобочитаемый JSON
+      const contextString = JSON.stringify(context, null, 2);
+      // Добавляем к записи лога, убирая лишние переносы строк для компактности
+      logEntry += ` | Context: ${contextString.replace(/\n/g, '')}`;
+    } catch (e) {
+      logEntry += ` | Context: (serialization error)`;
+    }
+  }
+  logEntry += '\n'; // Добавляем перенос строки в конце
   
   // Записываем в файл (добавляем в конец)
   fs.appendFile(filePath, logEntry, (err) => {

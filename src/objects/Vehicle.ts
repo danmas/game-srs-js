@@ -1120,8 +1120,17 @@ export class Vehicle extends Phaser.GameObjects.Sprite {
         continue;
       }
 
+      const sourceNoise = otherVehicle.getNoiseStrength();
+      const distance = Phaser.Math.Distance.Between(this.x, this.y, otherVehicle.x, otherVehicle.y);
       const receivedNoise = PhysicsUtils.getReceivedNoiseLevel(otherVehicle, this.getPosition());
       let newDetectionState = DetectionState.NO_CONTACT;
+
+      // Debug log
+      UniversalLogger.log(
+        `Sensor check: ${this.id} -> ${otherVehicle.id}. Dist: ${distance.toFixed(0)}. SourceNoise: ${sourceNoise.toFixed(0)}. ReceivedNoise: ${receivedNoise.toFixed(4)}. Thresholds (Z1/Z2/Z3): ${Settings.NOISE_THRESHOLD_ZONE_1_UNCERTAIN}/${Settings.NOISE_THRESHOLD_ZONE_2_LOCALIZED}/${Settings.NOISE_THRESHOLD_ZONE_3_IDENTIFIED}`,
+        `SENSOR_${this.id}`,
+        LogLevel.DEBUG
+      );
 
       if (receivedNoise >= Settings.NOISE_THRESHOLD_ZONE_3_IDENTIFIED) {
         newDetectionState = DetectionState.ZONE_3_IDENTIFIED;
@@ -1293,13 +1302,40 @@ export class Vehicle extends Phaser.GameObjects.Sprite {
     context?: LogContext
   ): boolean {
     // Если состояние не изменилось, не логируем
-    const lastState = this.logState.lastLoggedState[key];
-    if (lastState !== undefined && JSON.stringify(lastState) === JSON.stringify(state)) {
-      return false;
+    let stateStr, lastStateStr;
+    
+    try {
+      stateStr = JSON.stringify(state);
+      const lastState = this.logState.lastLoggedState[key];
+      if (lastState !== undefined) {
+        lastStateStr = JSON.stringify(lastState);
+        if (stateStr === lastStateStr) {
+          return false;
+        }
+      }
+    } catch (e) {
+      // Если JSON.stringify выбросил ошибку из-за циклической ссылки, 
+      // считаем что состояние изменилось, чтобы обработать его.
+      console.warn(`Circular reference detected in logIfStateChanged for key ${key}:`, e);
     }
     
-    // Обновляем последнее состояние и логируем
-    this.logState.lastLoggedState[key] = JSON.parse(JSON.stringify(state));
+    // Обновляем последнее состояние
+    try {
+      // Безопасное клонирование состояния
+      if (stateStr) {
+        this.logState.lastLoggedState[key] = JSON.parse(stateStr);
+      } else {
+        // Если stringification не удалась выше, создаём простую копию без глубоких ссылок
+        this.logState.lastLoggedState[key] = {
+          _simplified: true,
+          _timestamp: Date.now()
+        };
+      }
+    } catch (e) {
+      console.warn(`Failed to update state for key ${key}:`, e);
+      // В крайнем случае просто создаём метку времени
+      this.logState.lastLoggedState[key] = { _timestamp: Date.now() };
+    }
     
     // Добавляем идентификатор объекта в контекст
     const fullContext = {
