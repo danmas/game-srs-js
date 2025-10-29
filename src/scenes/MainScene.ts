@@ -15,6 +15,9 @@ import { Obstruction } from '../objects/Obstruction';
 import { Scenario } from '../scenario/Scenario';
 import { CoordUtils } from '../utils/CoordUtils';
 import { DetectionState } from '../utils/DetectionState';
+import { Lamp } from '../utils/Lamp';
+import { AILogger } from '../utils/AILogger';
+import { UniversalLogger } from '../utils/UniversalLogger';
 
 // Enum for player control states - ADDED
 enum PlayerControlState {
@@ -103,8 +106,21 @@ export class MainScene extends Phaser.Scene {
    * Создание объектов сцены
    */
   create(): void {
+    // Инициализируем универсальный логгер для логирования всех событий
+    UniversalLogger.initialize();
+    UniversalLogger.log('MainScene.create() started', 'MAIN_SCENE', 'INFO');
+    
     // Создаем камеры для игры и UI
     this.setupCameras();
+    
+    // Устанавливаем границы мира
+    this.physics.world.setBounds(-2500, -2500, 5000, 5000);
+    
+    // Инициализируем логгер ИИ для новой игровой сессии
+    AILogger.initialize();
+
+    // Создаем фон
+    this.add.image(0, 0, 'background').setOrigin(0.5, 0.5).setDepth(Constants.DEPTH_BACKGROUND);
     
     // Создаем графические элементы игровой зоны
     this.createGameArea();
@@ -143,6 +159,21 @@ export class MainScene extends Phaser.Scene {
     
     // Обновляем настройки камер после создания всех объектов
     this.updateCamerasConfig();
+
+    // Клавиша L для скачивания лога ИИ
+    if (this.input.keyboard) {
+        this.input.keyboard.on('keydown-L', () => {
+            AILogger.downloadLog();
+        });
+    }
+
+    // Запускаем медленный цикл для AI
+    this.time.addEvent({
+        delay: Settings.SLOW_LOOP_INTERVAL_MS,
+        callback: this.slowLoop,
+        callbackScope: this,
+        loop: true
+    });
   }
   
   /**
@@ -422,12 +453,6 @@ export class MainScene extends Phaser.Scene {
       return;
     }
     
-    // Медленный цикл (обновление интерфейса, ИИ)
-    if (time - this.timeLastSlowLoop > Settings.SLOW_LOOP_INTERVAL_MS) {
-      this.updateSlowLoop(time);
-      this.timeLastSlowLoop = time;
-    }
-    
     // Быстрый цикл (физика, движение)
     if (time - this.timeLastMove > Settings.MOVE_INTERVAL_MS) {
       this.updateFastLoop(delta);
@@ -439,7 +464,7 @@ export class MainScene extends Phaser.Scene {
    * Медленный цикл обновления
    * @param time Текущее время
    */
-  private updateSlowLoop(time: number): void {
+  private slowLoop(time: number): void {
     // Определяем, с чьей точки зрения обновляем сенсоры
     const perceivingShip = this.selectedVehicleForInformer || this.myShip;
 
@@ -520,21 +545,25 @@ export class MainScene extends Phaser.Scene {
     // Обновление ИИ кораблей
     for (const ship of this.redShips) {
       if (!ship.isUnderControl()) {
+        UniversalLogger.debug(`Calling AI_step_I for red ship ${ship.id}`, 'AI_LOOP');
         ship.AI_step_I();
       }
     }
     for (const ship of this.whiteShips) {
       if (!ship.isUnderControl()) {
+        UniversalLogger.debug(`Calling AI_step_I for white ship ${ship.id}`, 'AI_LOOP');
         ship.AI_step_I();
       }
     }
     for (const ship of this.redShips) {
       if (!ship.isUnderControl()) {
+        UniversalLogger.debug(`Calling AI_step_II for red ship ${ship.id}`, 'AI_LOOP');
         ship.AI_step_II();
       }
     }
     for (const ship of this.whiteShips) {
       if (!ship.isUnderControl()) {
+        UniversalLogger.debug(`Calling AI_step_II for white ship ${ship.id}`, 'AI_LOOP');
         ship.AI_step_II();
       }
     }

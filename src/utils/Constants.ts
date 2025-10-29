@@ -64,6 +64,7 @@ export class Constants {
   static readonly WP_TYPE_TORPEDO_TARGET: number = 100; // Specific for player-aimed torpedo Type I - ADDED
 
   // Глубины отображения (Z-index)
+  static readonly DEPTH_BACKGROUND: number = -100; // Фон должен быть ниже всего
   static readonly DEPTH_GRID: number = -99;
   static readonly DEPTH_WAYPOINT: number = -50; // Путевые точки выше сетки, но ниже кораблей
   static readonly DEPTH_VEHICLE_DEFAULT: number = 0;

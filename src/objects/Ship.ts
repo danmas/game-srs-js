@@ -6,6 +6,8 @@ import { TorpedoParams } from './TorpedoParams';
 import { Torpedo } from './Torpedo';
 import { MainScene } from '../scenes/MainScene';
 import { AIWeaponControl } from '../ai/AIWeaponControl';
+import { AIStrategyFactory } from '../ai/strategies/AIStrategyFactory';
+import { UniversalLogger } from '../utils/UniversalLogger';
 
 /**
  * Класс корабля - базовый класс для всех кораблей и подводных лодок
@@ -71,6 +73,10 @@ export class Ship extends Vehicle {
     } else {
       // Если корабль не под управлением игрока, создаем ему контроллер оружия ИИ
       this.aiWeaponControl = new AIWeaponControl(this, scene as MainScene);
+      
+      // Назначаем стратегию ИИ по умолчанию
+      this.aiStrategy = AIStrategyFactory.getDefaultStrategy(this, scene as MainScene);
+      UniversalLogger.log(`Ship ${this.id} initialized with AI strategy: ${this.aiStrategy?.name}, Active: ${this.active}`, 'SHIP_INIT', 'INFO');
     }
   }
   
@@ -329,39 +335,50 @@ export class Ship extends Vehicle {
   }
   
   /**
+   * Получает текущее здоровье корабля
+   */
+  public getHealth(): number {
+    return this.health;
+  }
+  
+  /**
    * Запускает ИИ - шаг 1 (анализ ситуации)
+   * Делегирует выполнение базовому классу, который использует aiStrategy
    */
   public AI_step_I(): void {
-    // Логика AI первого уровня (общая для всех кораблей)
-    // Например, обнаружение противника, принятие решения об атаке или уклонении
-
-    // Пример: если здоровье низкое, пытаемся уйти
-    if (this.health < 200 && this.power < Vehicle.POWER_4) {
-      this.setPower(Vehicle.POWER_4);
+    // Вызываем базовую реализацию, которая использует aiStrategy
+    super.AI_step_I();
+    
+    // Для совместимости со старым кодом: если нет стратегии, используем старую логику
+    if (!this.aiStrategy) {
+      // Пример: если здоровье низкое, пытаемся уйти
+      if (this.health < 200 && this.power < Vehicle.POWER_4) {
+        this.setPower(Vehicle.POWER_4);
+      }
     }
   }
   
   /**
    * Запускает ИИ - шаг 2 (принятие решений)
+   * Делегирует выполнение базовому классу, который использует aiStrategy
    */
   public AI_step_II(): void {
-    // Логика ИИ для второго шага (реакция, атака)
+    // Если неактивен или под контролем игрока, ничего не делаем
     if (!this.active || this.underControl) {
-      return; // Неактивен или под контролем игрока
+      return;
     }
-
-    // Если корабль не в конвое, он может пытаться атаковать
-    if (!this.isConvoyShip && this.aiWeaponControl) {
-        // Получаем все корабли на сцене для передачи в evaluateAndFire,
-        // так как AIWeaponControl может нуждаться в этом списке для каких-то своих нужд,
-        // даже если основная логика выбора цели теперь внутри него.
-        // const mainScene = this.scene as MainScene;
-        // const allShips: Ship[] = [...mainScene.getRedShips(), ...mainScene.getWhiteShips()]; 
-        // ^^^ ЭТО БОЛЬШЕ НЕ НУЖНО, AIWeaponControl берет цели из owner.perceivedTargets
-
-        this.aiWeaponControl.evaluateAndFire(); // Вызываем без аргументов
+    
+    // Вызываем базовую реализацию, которая использует aiStrategy
+    super.AI_step_II();
+    
+    // Для совместимости со старым кодом: если нет стратегии, используем старую логику
+    if (!this.aiStrategy) {
+      // Если корабль не в конвое, он может пытаться атаковать
+      if (!this.isConvoyShip && this.aiWeaponControl) {
+        this.aiWeaponControl.evaluateAndFire();
+      }
     }
-
+    
     // Если у корабля есть путь и он не движется по нему, запускаем движение
     // (эта логика может быть более сложной в зависимости от состояния ИИ)
     if (this.wayPoints.length > 0 && !this.isMovingOnWayPoint && this.moveState !== Vehicle.ST_WP_SEARCH_TARGET) {

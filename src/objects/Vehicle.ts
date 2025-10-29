@@ -8,6 +8,8 @@ import { PerceivedTargetInfo } from '../interfaces/PerceivedTargetInfo';
 import { PhysicsUtils } from '../utils/PhysicsUtils';
 import { Informer } from '../utils/Informer';
 import { Ship } from './Ship';
+import { AIStrategy, AIWorldContext } from '../ai/strategies/AIStrategy';
+import { UniversalLogger } from '../utils/UniversalLogger';
 
 /**
  * Базовый класс для всех движущихся объектов
@@ -19,6 +21,8 @@ export interface WayPointData {
 }
 
 export class Vehicle extends Phaser.GameObjects.Sprite {
+  // Стратегия ИИ для этого объекта
+  public aiStrategy: AIStrategy | null = null;
   // Константы для уровней мощности
   static readonly POWER_0: number = 0;
   static readonly POWER_1: number = 1;
@@ -1170,5 +1174,68 @@ export class Vehicle extends Phaser.GameObjects.Sprite {
         informer.setCommand(displayMessage);
     }
     this.lastKnownPlayerShipForSensorMessages = currentTickPlayerShip;
+  }
+  
+  /**
+   * Запускает ИИ - шаг 1 (анализ ситуации)
+   * Вызывается из MainScene.slowLoop
+   */
+  public AI_step_I(): void {
+    if (!this.active || !this.aiStrategy) return;
+    
+    UniversalLogger.debug(`AI_step_I called for ${this.entityType} ${this.id}`, 'AI_STEP_I');
+    
+    // Подготовка контекста для ИИ
+    const context: AIWorldContext = {
+      perceivedTargets: this.perceivedTargets,
+      scene: this.scene as MainScene,
+      gameTime: this.scene.time.now
+    };
+    
+    // Делегируем управление стратегии
+    this.aiStrategy.analyzeStep(this, context);
+  }
+  
+  /**
+   * Запускает ИИ - шаг 2 (принятие решений)
+   * Вызывается из MainScene.slowLoop
+   */
+  public AI_step_II(): void {
+    if (!this.active || !this.aiStrategy) return;
+    
+    UniversalLogger.debug(`AI_step_II called for ${this.entityType} ${this.id}`, 'AI_STEP_II');
+    
+    // Подготовка контекста для ИИ
+    const context: AIWorldContext = {
+      perceivedTargets: this.perceivedTargets,
+      scene: this.scene as MainScene,
+      gameTime: this.scene.time.now
+    };
+    
+    // Делегируем управление стратегии
+    this.aiStrategy.actionStep(this, context);
+  }
+  
+  /**
+   * Геттеры для доступа к защищенным свойствам из стратегий ИИ
+   */
+  public getMoveState(): number {
+    return this.moveState;
+  }
+  
+  // Метод getPowerLevel удален, так как уже есть getPower()
+  
+  // Метод getWayPoints удален, так как уже есть реализация выше
+  
+  public getIsMovingOnWayPoint(): boolean {
+    return this.isMovingOnWayPoint;
+  }
+  
+  /**
+   * Устанавливает состояние движения
+   * @param state Новое состояние движения
+   */
+  public setMoveState(state: number): void {
+    this.moveState = state;
   }
 } 
