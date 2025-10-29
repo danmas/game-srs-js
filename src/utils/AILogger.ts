@@ -1,5 +1,5 @@
 import { Vehicle } from "../objects/Vehicle";
-import { UniversalLogger } from "./UniversalLogger";
+import { UniversalLogger, LogLevel, LogContext } from "./UniversalLogger";
 
 /**
  * AILogger предоставляет простой механизм логирования решений ИИ.
@@ -19,7 +19,7 @@ export class AILogger {
         const timestamp = new Date().toISOString();
         const message = `--- AI Log Initialized at ${timestamp} ---`;
         this.logMessage(message);
-        UniversalLogger.log(`AI Log initialized`, 'AI_LOGGER', 'INFO');
+        UniversalLogger.log(`AI Log initialized`, 'AI_LOGGER', LogLevel.INFO);
     }
 
     /**
@@ -28,18 +28,48 @@ export class AILogger {
      * @param strategyName Имя стратегии ИИ, принявшей решение.
      * @param decision Описание принятого решения.
      * @param reason Контекст или причина принятия решения.
+     * @param level Уровень логирования.
+     * @param context Дополнительный контекст.
      */
-    public static log(owner: Vehicle, strategyName: string, decision: string, reason: string): void {
+    public static log(
+        owner: Vehicle, 
+        strategyName: string, 
+        decision: string, 
+        reason: string, 
+        level: LogLevel = LogLevel.INFO,
+        context?: LogContext
+    ): void {
         if (!this.isInitialized) {
             this.initialize();
         }
         
-        const timestamp = new Date().toLocaleTimeString();
-        const ownerInfo = `${owner.entityType} ${owner.id}`;
-        const message = `[${timestamp}] [${ownerInfo}] [${strategyName}] | Decision: ${decision} | Reason: ${reason}`;
+        // Используем дросселирование логов на основе изменения состояния
+        // Логируем только если решение или причина изменились
+        const logState = {
+            decision,
+            reason
+        };
         
-        this.logMessage(message);
-        UniversalLogger.log(`${ownerInfo} - ${decision}: ${reason}`, 'AI', 'INFO');
+        // Используем встроенный механизм дросселирования в Vehicle
+        const wasLogged = owner.logIfStateChanged(
+            `ai_decision_${strategyName}`,
+            `${decision}: ${reason}`,
+            logState,
+            'AI',
+            level,
+            {
+                ...context,
+                strategy: strategyName
+            }
+        );
+        
+        // Если лог был отправлен, сохраняем его и в локальную историю AILogger
+        if (wasLogged) {
+            const timestamp = new Date().toLocaleTimeString();
+            const ownerInfo = `${owner.entityType} ${owner.id}`;
+            const message = `[${timestamp}] [${ownerInfo}] [${strategyName}] | Decision: ${decision} | Reason: ${reason}`;
+            this.logMessage(message);
+        }
     }
 
     /**
@@ -55,11 +85,34 @@ export class AILogger {
      * Отмечает в логе смену стратегии ИИ у объекта.
      * @param owner Объект, у которого меняется ИИ.
      * @param newStrategyName Имя новой стратегии.
+     * @param oldStrategyName Имя предыдущей стратегии.
      */
-    public static changeLogContext(owner: Vehicle, newStrategyName: string): void {
+    public static changeLogContext(
+        owner: Vehicle, 
+        newStrategyName: string, 
+        oldStrategyName?: string
+    ): void {
         const ownerInfo = `${owner.entityType} ${owner.id}`;
+        
+        // Всегда логируем смену стратегии, это важное событие
+        const message = oldStrategyName 
+            ? `Strategy changed from ${oldStrategyName} to ${newStrategyName}` 
+            : `Strategy changed to ${newStrategyName}`;
+            
         this.logMessage(`--- [${ownerInfo}] AI Strategy changed to [${newStrategyName}] ---`);
-        UniversalLogger.log(`Strategy changed to ${newStrategyName}`, `AI_${ownerInfo}`, 'INFO');
+        
+        // Используем структурированное логирование для этого события
+        UniversalLogger.log(
+            message, 
+            `AI_${ownerInfo}`, 
+            LogLevel.INFO,
+            {
+                entityId: owner.id,
+                entityType: owner.entityType,
+                newStrategy: newStrategyName,
+                oldStrategy: oldStrategyName || 'unknown'
+            }
+        );
     }
 
     /**
@@ -85,6 +138,6 @@ export class AILogger {
         URL.revokeObjectURL(url);
         
         console.log("AILogger: Загрузка файла логов инициирована.");
-        UniversalLogger.log(`AI logs downloaded (${this.logs.length} entries)`, 'AI_LOGGER', 'INFO');
+        UniversalLogger.log(`AI logs downloaded (${this.logs.length} entries)`, 'AI_LOGGER', LogLevel.INFO);
     }
 }

@@ -17,7 +17,7 @@ import { CoordUtils } from '../utils/CoordUtils';
 import { DetectionState } from '../utils/DetectionState';
 import { Lamp } from '../utils/Lamp';
 import { AILogger } from '../utils/AILogger';
-import { UniversalLogger } from '../utils/UniversalLogger';
+import { UniversalLogger, LogLevel } from '../utils/UniversalLogger';
 
 // Enum for player control states - ADDED
 enum PlayerControlState {
@@ -107,8 +107,15 @@ export class MainScene extends Phaser.Scene {
    */
   create(): void {
     // Инициализируем универсальный логгер для логирования всех событий
-    UniversalLogger.initialize();
-    UniversalLogger.log('MainScene.create() started', 'MAIN_SCENE', 'INFO');
+    UniversalLogger.initialize({
+      minLevel: Settings.LOG_MIN_LEVEL,
+      enableConsole: Settings.LOG_ENABLE_CONSOLE,
+      enableLocalStorage: Settings.LOG_ENABLE_LOCAL_STORAGE,
+      enableServer: Settings.LOG_ENABLE_SERVER,
+      throttleInterval: Settings.LOG_THROTTLE_INTERVAL,
+      useStructuredFormat: Settings.LOG_USE_STRUCTURED_FORMAT
+    });
+    UniversalLogger.log('MainScene.create() started', 'MAIN_SCENE', LogLevel.INFO);
     
     // Создаем камеры для игры и UI
     this.setupCameras();

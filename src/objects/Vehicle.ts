@@ -9,7 +9,7 @@ import { PhysicsUtils } from '../utils/PhysicsUtils';
 import { Informer } from '../utils/Informer';
 import { Ship } from './Ship';
 import { AIStrategy, AIWorldContext } from '../ai/strategies/AIStrategy';
-import { UniversalLogger } from '../utils/UniversalLogger';
+import { UniversalLogger, LogLevel, LogContext } from '../utils/UniversalLogger';
 
 /**
  * Базовый класс для всех движущихся объектов
@@ -20,9 +20,28 @@ export interface WayPointData {
   graphics?: Phaser.GameObjects.Graphics;
 }
 
+export interface LogState {
+  lastLoggedState: {
+    [key: string]: any;  // Хранит последнее состояние для каждого типа лога
+  };
+  lastLogTime: {
+    [key: string]: number;  // Хранит время последнего лога для каждого типа
+  };
+  logCounter: {
+    [key: string]: number;  // Счетчик для логирования каждые N тиков
+  };
+}
+
 export class Vehicle extends Phaser.GameObjects.Sprite {
   // Стратегия ИИ для этого объекта
   public aiStrategy: AIStrategy | null = null;
+  
+  // Состояние логирования для дросселирования
+  public logState: LogState = {
+    lastLoggedState: {},
+    lastLogTime: {},
+    logCounter: {}
+  };
   // Константы для уровней мощности
   static readonly POWER_0: number = 0;
   static readonly POWER_1: number = 1;
@@ -92,10 +111,8 @@ export class Vehicle extends Phaser.GameObjects.Sprite {
   private noiseCirclesGraphics: Phaser.GameObjects.Graphics | null = null;
 
   // Пороговые значения и стили для отображения кругов шума (на основе AS-версии)
-  private static readonly NOISE_DISPLAY_THRESHOLDS_AS = [
-    // { threshold: 0.8, color: Constants.COLOR_LIGHT_RED_AS_EQUIVALENT, alpha: 1.0, lineThickness: 2 }, // Самый тихий, самый большой круг
-    // { threshold: 0.5, color: Constants.COLOR_MEDIUM_RED_AS_EQUIVALENT, alpha: 1.0, lineThickness: 2 },
-    // { threshold: 0.2, color: Constants.COLOR_DARK_RED_AS_EQUIVALENT, alpha: 1.0, lineThickness: 2 }  // Самый громкий, самый маленький круг
+  // Красные оттенки для врагов
+  private static readonly NOISE_DISPLAY_THRESHOLDS_RED = [
     // ПОРЯДОК ВАЖЕН ДЛЯ ОТРИСОВКИ, ЧТОБЫ БОЛЬШИЕ КРУГИ НЕ ПЕРЕКРЫВАЛИ МЕНЬШИЕ, ЕСЛИ БУДЕТ ЗАЛИВКА
     // НО ТАК КАК У НАС ТОЛЬКО ЛИНИИ, ПОРЯДОК НЕ СТОЛЬ КРИТИЧЕН.
     // ДЛЯ СООТВЕТСТВИЯ С AS, ГДЕ СНАЧАЛА РИСУЕТСЯ ДЛЯ 0.2, ПОТОМ 0.5, ПОТОМ 0.8:
@@ -103,6 +120,16 @@ export class Vehicle extends Phaser.GameObjects.Sprite {
     { threshold: 0.5, color: 0xFF6347, alphaLine: 1.0, lineThickness: 2 }, // Средне-красный (томатный - пример)
     { threshold: 0.2, color: 0xFFA07A, alphaLine: 1.0, lineThickness: 2 }  // Светло-красный (светло-лососевый - пример)
   ];
+  
+  // Синие оттенки для игрока
+  private static readonly NOISE_DISPLAY_THRESHOLDS_BLUE = [
+    { threshold: 0.8, color: 0x000080, alphaLine: 1.0, lineThickness: 2 }, // Темно-синий
+    { threshold: 0.5, color: 0x1E90FF, alphaLine: 1.0, lineThickness: 2 }, // Средне-синий (DodgerBlue)
+    { threshold: 0.2, color: 0x87CEFA, alphaLine: 1.0, lineThickness: 2 }  // Светло-синий (LightSkyBlue)
+  ];
+  
+  // Ссылка на AS массив для обратной совместимости
+  private static readonly NOISE_DISPLAY_THRESHOLDS_AS = Vehicle.NOISE_DISPLAY_THRESHOLDS_RED;
 
   // Новые поля для сенсоров и отображения
   public perceivedTargets: Map<number, PerceivedTargetInfo>;
@@ -1003,6 +1030,7 @@ export class Vehicle extends Phaser.GameObjects.Sprite {
 
   /**
    * Обновляет и перерисовывает круги визуализации шума.
+   * Теперь выбирает цветовую схему в зависимости от типа корабля (игрок/враг)
    */
   protected updateNoiseCircles(): void {
     if (!this.noiseCirclesGraphics) return;
@@ -1014,7 +1042,14 @@ export class Vehicle extends Phaser.GameObjects.Sprite {
         return;
     }
 
-    for (const T of Vehicle.NOISE_DISPLAY_THRESHOLDS_AS) {
+    // Определяем, какую цветовую схему использовать
+    // Если это корабль игрока (underControl == true), используем синие оттенки
+    // В противном случае используем красные оттенки
+    const thresholds = this.underControl ? 
+                       Vehicle.NOISE_DISPLAY_THRESHOLDS_BLUE : 
+                       Vehicle.NOISE_DISPLAY_THRESHOLDS_RED;
+
+    for (const T of thresholds) {
       if (T.threshold <= 0) continue;
 
       const radiusSquared = sourceNoiseOutput / T.threshold;
@@ -1238,4 +1273,120 @@ export class Vehicle extends Phaser.GameObjects.Sprite {
   public setMoveState(state: number): void {
     this.moveState = state;
   }
-} 
+  
+  /**
+   * Логирует сообщение с проверкой изменения состояния
+   * @param key Ключ для идентификации типа лога
+   * @param message Сообщение для логирования
+   * @param state Текущее состояние для сравнения с предыдущим
+   * @param tag Тег для категоризации
+   * @param level Уровень логирования
+   * @param context Дополнительный контекст
+   * @returns true если лог был отправлен, false если был пропущен
+   */
+  logIfStateChanged(
+    key: string, 
+    message: string, 
+    state: any, 
+    tag: string = 'VEHICLE', 
+    level: LogLevel = LogLevel.INFO,
+    context?: LogContext
+  ): boolean {
+    // Если состояние не изменилось, не логируем
+    const lastState = this.logState.lastLoggedState[key];
+    if (lastState !== undefined && JSON.stringify(lastState) === JSON.stringify(state)) {
+      return false;
+    }
+    
+    // Обновляем последнее состояние и логируем
+    this.logState.lastLoggedState[key] = JSON.parse(JSON.stringify(state));
+    
+    // Добавляем идентификатор объекта в контекст
+    const fullContext = {
+      ...(context || {}),
+      entityId: this.id,
+      entityType: this.entityType
+    };
+    
+    UniversalLogger.log(message, `${tag}_${this.entityType}${this.id}`, level, fullContext);
+    return true;
+  }
+  
+  /**
+   * Логирует сообщение с ограничением по времени
+   * @param key Ключ для идентификации типа лога
+   * @param message Сообщение для логирования
+   * @param minInterval Минимальный интервал между логами в мс
+   * @param tag Тег для категоризации
+   * @param level Уровень логирования
+   * @param context Дополнительный контекст
+   * @returns true если лог был отправлен, false если был пропущен
+   */
+  logWithTimeThrottle(
+    key: string, 
+    message: string, 
+    minInterval: number = 1000,
+    tag: string = 'VEHICLE', 
+    level: LogLevel = LogLevel.INFO,
+    context?: LogContext
+  ): boolean {
+    const now = Date.now();
+    const lastTime = this.logState.lastLogTime[key] || 0;
+    
+    // Если прошло недостаточно времени, пропускаем
+    if (now - lastTime < minInterval) {
+      return false;
+    }
+    
+    // Обновляем время последнего лога
+    this.logState.lastLogTime[key] = now;
+    
+    // Добавляем идентификатор объекта в контекст
+    const fullContext = {
+      ...(context || {}),
+      entityId: this.id,
+      entityType: this.entityType
+    };
+    
+    UniversalLogger.log(message, `${tag}_${this.entityType}${this.id}`, level, fullContext);
+    return true;
+  }
+  
+  /**
+   * Логирует сообщение каждые N вызовов
+   * @param key Ключ для идентификации типа лога
+   * @param message Сообщение для логирования
+   * @param everyNth Частота логирования (каждый N-й вызов)
+   * @param tag Тег для категоризации
+   * @param level Уровень логирования
+   * @param context Дополнительный контекст
+   * @returns true если лог был отправлен, false если был пропущен
+   */
+  logEveryNthCall(
+    key: string, 
+    message: string, 
+    everyNth: number = 5,
+    tag: string = 'VEHICLE', 
+    level: LogLevel = LogLevel.INFO,
+    context?: LogContext
+  ): boolean {
+    // Увеличиваем счетчик вызовов
+    this.logState.logCounter[key] = (this.logState.logCounter[key] || 0) + 1;
+    
+    // Логируем только каждый N-й вызов
+    if (this.logState.logCounter[key] % everyNth !== 0) {
+      return false;
+    }
+    
+    // Добавляем идентификатор объекта и счетчик в контекст
+    const fullContext = {
+      ...(context || {}),
+      entityId: this.id,
+      entityType: this.entityType,
+      callCount: this.logState.logCounter[key]
+    };
+    
+    UniversalLogger.log(message, `${tag}_${this.entityType}${this.id}`, level, fullContext);
+    return true;
+  }
+}

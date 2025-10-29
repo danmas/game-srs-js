@@ -6,7 +6,8 @@ import { Settings } from '../../utils/Settings';
 import { DetectionState } from '../../utils/DetectionState';
 import { BaseAIStrategy } from './BaseAIStrategy';
 import { AIWorldContext } from './AIStrategy';
-import { UniversalLogger } from '../../utils/UniversalLogger';
+import { UniversalLogger, LogLevel } from '../../utils/UniversalLogger';
+import { AILogger } from '../../utils/AILogger';
 
 /**
  * Стандартная стратегия для кораблей.
@@ -22,8 +23,11 @@ export class DefaultShipStrategy extends BaseAIStrategy {
      * Фаза анализа - сбор информации и оценка ситуации
      */
     public analyzeStep(owner: Vehicle, context: AIWorldContext): void {
-        UniversalLogger.debug(`analyzeStep called for ${owner.constructor.name} ${owner.id}`, `ANALYZE_${owner.id}`);
+        // Закомментируем спам-логи
+        UniversalLogger.debug(`---analyzeStep called for ${owner.constructor.name} ${owner.id}`, `ANALYZE_${owner.id}`);
+        
         if (!owner.active || !(owner instanceof Ship)) return;
+        UniversalLogger.info(`+++ analyzeStep called for ${owner.constructor.name} ${owner.id}`, `ANALYZE_${owner.id}`);
         
         const ship = owner as Ship;
         
@@ -32,34 +36,71 @@ export class DefaultShipStrategy extends BaseAIStrategy {
         if (ship.getHealth() < 200 && ship.getPower() < Vehicle.POWER_4) {
             const oldPower = ship.getPower();
             ship.setPower(Vehicle.POWER_4);
-            this.logDecision(`Set Power to ${Vehicle.POWER_4}`, `Health low (${ship.getHealth()}), increasing speed from ${oldPower}.`);
+            const decision = `Set Power to ${Vehicle.POWER_4}`;
+            const reason = `Health low (${ship.getHealth()}), increasing speed from ${oldPower}.`;
+            AILogger.log(ship, this.name, decision, reason, LogLevel.INFO, { oldPower, newHealth: ship.getHealth() });
+        } else if (ship.getHealth() < 200) {
+            // Дополнительный лог, если здоровье низкое, но скорость уже максимальная
+            AILogger.log(ship, this.name, "Maintain Max Speed", `Health low (${ship.getHealth()}), but already at full power.`, LogLevel.WARN);
         }
         
         // Поиск цели для атаки
+        const prevTargetId = this.targetId;
         this.findTarget(ship, context);
+        
+        // Логируем изменение цели
+        if (this.targetId !== prevTargetId) {
+            if (this.targetId !== null) {
+                const targetInfo = ship.perceivedTargets.get(this.targetId);
+                const distance = targetInfo ? 
+                    Phaser.Math.Distance.Between(ship.x, ship.y, targetInfo.targetVehicle.x, targetInfo.targetVehicle.y).toFixed(0) : 
+                    "unknown";
+                const reason = targetInfo ? 
+                    `Localized detection (${targetInfo.detectionState}), enemy Ship at dist ${distance}.` : 
+                    "Target acquired via sensors.";
+                AILogger.log(ship, this.name, `Acquire Target ${this.targetId}`, reason, LogLevel.INFO, { 
+                    detectionState: targetInfo?.detectionState,
+                    distance: distance
+                });
+            } else {
+                AILogger.log(ship, this.name, "No Target", "No suitable enemies in ZONE_2+.", LogLevel.DEBUG);
+            }
+        }
     }
     
     /**
      * Фаза действия - принятие решений и выполнение действий
      */
     public actionStep(owner: Vehicle, context: AIWorldContext): void {
-        UniversalLogger.debug(`actionStep called for ${owner.constructor.name} ${owner.id}`, `ACTION_${owner.id}`);
+        // Закомментируем спам-логи
+        UniversalLogger.info(`--- actionStep called for ${owner.constructor.name} ${owner.id}`, `ACTION_${owner.id}`);
+        
         if (!owner.active || !(owner instanceof Ship)) return;
+        UniversalLogger.info(`+++ actionStep called for ${owner.constructor.name} ${owner.id}`, `ACTION_${owner.id}`);
         
         const ship = owner as Ship;
-        UniversalLogger.debug(`isConvoy: ${ship.isConvoy()}, targetId: ${this.targetId}`, `ACTION_${owner.id}`);
+        // UniversalLogger.debug(`isConvoy: ${ship.isConvoy()}, targetId: ${this.targetId}`, `ACTION_${owner.id}`);
         
         // Если это корабль конвоя, не атакуем
-        if (ship.isConvoy()) return;
+        if (ship.isConvoy()) {
+            AILogger.log(ship, this.name, "Hold Position", "Convoy ship: no aggressive actions.", LogLevel.INFO);
+            return;
+        }
         
         // Если есть цель, пытаемся атаковать
         if (this.targetId !== null) {
-            UniversalLogger.debug(`Ship has target ${this.targetId}, calling attackTarget`, `ACTION_${owner.id}`);
+            // Лог атаки только на первом вызове или изменении (дроссель сработает)
+            AILogger.log(ship, this.name, `Engage Target ${this.targetId}`, "Target acquired, initiating attack sequence.", LogLevel.INFO);
+            // UniversalLogger.debug(`Ship has target ${this.targetId}, calling attackTarget`, `ACTION_${owner.id}`);
             this.attackTarget(ship, context);
+        } else {
+            // Лог idle только если изменилось (e.g., потеряли цель)
+            AILogger.log(ship, this.name, "Patrol Mode", "No target: continue waypoint navigation.", LogLevel.DEBUG);
         }
         
         // Управление движением по WayPoints
         if (ship.getWayPoints().length > 0 && !ship.getIsMovingOnWayPoint()) {
+            AILogger.log(ship, this.name, "Start WayPoint Route", `Route with ${ship.getWayPoints().length} points activated.`, LogLevel.INFO);
             ship.startMoveOnWP();
         }
     }
@@ -89,9 +130,14 @@ export class DefaultShipStrategy extends BaseAIStrategy {
      */
     private attackTarget(ship: Ship, context: AIWorldContext): void {
         if (this.targetId === null || !this.scene) return;
+
+        UniversalLogger.info(`--- attackTarget called for ${ship.constructor.name} }`, `ACTION_`);
         
         const targetInfo = ship.perceivedTargets.get(this.targetId);
-        if (!targetInfo || !(targetInfo.targetVehicle instanceof Ship)) return;
+        if (!targetInfo || !(targetInfo.targetVehicle instanceof Ship)) {
+            AILogger.log(ship, this.name, "Abort Attack", "Target invalid or lost contact.", LogLevel.WARN, { targetId: this.targetId });
+            return;
+        }
         
         const target = targetInfo.targetVehicle as Ship;
         
@@ -111,14 +157,42 @@ export class DefaultShipStrategy extends BaseAIStrategy {
         const distanceOk = distanceToTarget < Settings.TRP_I_DIST_EXECUTION;
         const angleOk = Math.abs(diffAngle) < Settings.TRP_ATACK__ANGLE_WARNING;
         
-        if (weaponReady && distanceOk && angleOk) {
-            this.logDecision(`Fire Torpedo I at Target ${target.id}`, `Target in range (${distanceToTarget.toFixed(0)}) and angle is good (${diffAngle.toFixed(0)}).`);
-            this.scene.fireTorpedo(
-                ship,
-                Constants.WEAPON_SELECT_TORP_I,
-                targetTruePosition.x,
-                targetTruePosition.y
-            );
+        // Логируем причины, по которым не можем атаковать
+        if (!weaponReady) {
+            AILogger.log(ship, this.name, "Hold Fire", `Torpedo I not ready (reload time).`, LogLevel.DEBUG, { weapon: Constants.WEAPON_SELECT_TORP_I });
+            return;
         }
+        
+        if (!distanceOk) {
+            AILogger.log(ship, this.name, "Adjust Position", `Target too far (${distanceToTarget.toFixed(0)} > ${Settings.TRP_I_DIST_EXECUTION}).`, LogLevel.INFO, { 
+                requiredDist: Settings.TRP_I_DIST_EXECUTION,
+                currentDist: distanceToTarget
+            });
+            return;
+        }
+        
+        if (!angleOk) {
+            AILogger.log(ship, this.name, "Maneuver for Angle", `Angle off by ${diffAngle.toFixed(1)}° (max ${Settings.TRP_ATACK__ANGLE_WARNING}).`, LogLevel.INFO, { 
+                currentAngle: diffAngle,
+                maxAngle: Settings.TRP_ATACK__ANGLE_WARNING
+            });
+            return;
+        }
+        
+        // Все условия соблюдены - стреляем!
+        const decision = `Fire Torpedo I at Target ${target.id}`;
+        const reason = `Target in range (${distanceToTarget.toFixed(0)}) and angle is good (${diffAngle.toFixed(1)}°).`;
+        AILogger.log(ship, this.name, decision, reason, LogLevel.INFO, { 
+            dist: distanceToTarget, 
+            angle: diffAngle,
+            targetId: target.id
+        });
+        
+        this.scene.fireTorpedo(
+            ship,
+            Constants.WEAPON_SELECT_TORP_I,
+            targetTruePosition.x,
+            targetTruePosition.y
+        );
     }
 }

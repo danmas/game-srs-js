@@ -7,7 +7,7 @@ import { Torpedo } from './Torpedo';
 import { MainScene } from '../scenes/MainScene';
 import { AIWeaponControl } from '../ai/AIWeaponControl';
 import { AIStrategyFactory } from '../ai/strategies/AIStrategyFactory';
-import { UniversalLogger } from '../utils/UniversalLogger';
+import { UniversalLogger, LogLevel } from '../utils/UniversalLogger';
 
 /**
  * Класс корабля - базовый класс для всех кораблей и подводных лодок
@@ -76,7 +76,7 @@ export class Ship extends Vehicle {
       
       // Назначаем стратегию ИИ по умолчанию
       this.aiStrategy = AIStrategyFactory.getDefaultStrategy(this, scene as MainScene);
-      UniversalLogger.log(`Ship ${this.id} initialized with AI strategy: ${this.aiStrategy?.name}, Active: ${this.active}`, 'SHIP_INIT', 'INFO');
+      UniversalLogger.log(`Ship ${this.id} initialized with AI strategy: ${this.aiStrategy?.name}, Active: ${this.active}`, 'SHIP_INIT', LogLevel.INFO);
     }
   }
   

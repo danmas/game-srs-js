@@ -79,6 +79,16 @@ export class Settings {
   static readonly AI_torped_fire_interval: number = 100;
   static readonly WEB_ENABLE: boolean = true;
   
+  // Настройки логирования
+  static readonly LOG_MIN_LEVEL: number = 2;  // 0=TRACE, 1=DEBUG, 2=INFO, 3=WARN, 4=ERROR
+  static readonly LOG_ENABLE_CONSOLE: boolean = true;
+  static readonly LOG_ENABLE_LOCAL_STORAGE: boolean = true;
+  static readonly LOG_ENABLE_SERVER: boolean = true;
+  static readonly LOG_THROTTLE_INTERVAL: number = 1000; // мс
+  static readonly LOG_USE_STRUCTURED_FORMAT: boolean = true;
+  static readonly LOG_VEHICLE_THROTTLE_INTERVAL: number = 2000; // мс
+  static readonly LOG_VEHICLE_THROTTLE_EVERY_NTH: number = 5; // каждый 5-й тик
+  
   // Настройки атаки торпедами
   static readonly TRP_ATACK__ANGLE_WARNING: number = 180.0;
   static readonly TRP_ATACK_DISTANCE_WARNING: number = 500.0;
