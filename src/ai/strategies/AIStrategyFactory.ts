@@ -3,9 +3,6 @@ import { Ship } from '../../objects/Ship';
 import { Torpedo } from '../../objects/Torpedo';
 import { MainScene } from '../../scenes/MainScene';
 import { AIStrategy } from './AIStrategy';
-import { DefaultShipStrategy } from './DefaultShipStrategy';
-import { AggressiveShipStrategy } from './AggressiveShipStrategy';
-import { HomingTorpedoStrategy } from './HomingTorpedoStrategy';
 import { AILogger } from '../../utils/AILogger';
 
 /**
@@ -14,12 +11,66 @@ import { AILogger } from '../../utils/AILogger';
 export class AIStrategyFactory {
     // Хранилище всех доступных стратегий
     private static strategies: Map<string, new () => AIStrategy> = new Map();
+    // Флаг инициализации стандартных стратегий
+    private static initialized: boolean = false;
     
-    // Инициализация стандартных стратегий
-    static {
-        AIStrategyFactory.registerStrategy('default_ship', DefaultShipStrategy);
-        AIStrategyFactory.registerStrategy('aggressive_ship', AggressiveShipStrategy);
-        AIStrategyFactory.registerStrategy('homing_torpedo', HomingTorpedoStrategy);
+    // Кэш для ленивой загрузки классов стратегий
+    private static _DefaultShipStrategy: (new () => AIStrategy) | null = null;
+    private static _AggressiveShipStrategy: (new () => AIStrategy) | null = null;
+    private static _HomingTorpedoStrategy: (new () => AIStrategy) | null = null;
+    private static _MerchantShipStrategy: (new () => AIStrategy) | null = null;
+    
+    /**
+     * Ленивые геттеры для загрузки классов стратегий
+     * Использует синхронный require для webpack совместимости
+     */
+    private static get DefaultShipStrategyClass(): new () => AIStrategy {
+        if (!AIStrategyFactory._DefaultShipStrategy) {
+            // Используем webpack-совместимый require
+            const module = (require as any)('./DefaultShipStrategy');
+            AIStrategyFactory._DefaultShipStrategy = module.DefaultShipStrategy;
+        }
+        return AIStrategyFactory._DefaultShipStrategy!;
+    }
+    
+    private static get AggressiveShipStrategyClass(): new () => AIStrategy {
+        if (!AIStrategyFactory._AggressiveShipStrategy) {
+            const module = (require as any)('./AggressiveShipStrategy');
+            AIStrategyFactory._AggressiveShipStrategy = module.AggressiveShipStrategy;
+        }
+        return AIStrategyFactory._AggressiveShipStrategy!;
+    }
+    
+    private static get HomingTorpedoStrategyClass(): new () => AIStrategy {
+        if (!AIStrategyFactory._HomingTorpedoStrategy) {
+            const module = (require as any)('./HomingTorpedoStrategy');
+            AIStrategyFactory._HomingTorpedoStrategy = module.HomingTorpedoStrategy;
+        }
+        return AIStrategyFactory._HomingTorpedoStrategy!;
+    }
+    
+    private static get MerchantShipStrategyClass(): new () => AIStrategy {
+        if (!AIStrategyFactory._MerchantShipStrategy) {
+            const module = (require as any)('./MerchantShipStrategy');
+            AIStrategyFactory._MerchantShipStrategy = module.MerchantShipStrategy;
+        }
+        return AIStrategyFactory._MerchantShipStrategy!;
+    }
+    
+    /**
+     * Ленивая инициализация стандартных стратегий
+     * Вызывается автоматически при первом использовании фабрики
+     */
+    private static ensureInitialized(): void {
+        if (AIStrategyFactory.initialized) return;
+        
+        // Ленивая загрузка классов стратегий для избежания циклических зависимостей
+        AIStrategyFactory.registerStrategy('default_ship', AIStrategyFactory.DefaultShipStrategyClass);
+        AIStrategyFactory.registerStrategy('aggressive_ship', AIStrategyFactory.AggressiveShipStrategyClass);
+        AIStrategyFactory.registerStrategy('homing_torpedo', AIStrategyFactory.HomingTorpedoStrategyClass);
+        AIStrategyFactory.registerStrategy('merchant_ship', AIStrategyFactory.MerchantShipStrategyClass);
+        
+        AIStrategyFactory.initialized = true;
     }
     
     /**
@@ -37,6 +88,7 @@ export class AIStrategyFactory {
      * @returns Экземпляр стратегии или null, если стратегия не найдена
      */
     public static createStrategy(id: string): AIStrategy | null {
+        AIStrategyFactory.ensureInitialized();
         const strategyClass = AIStrategyFactory.strategies.get(id);
         if (!strategyClass) return null;
         
@@ -67,18 +119,24 @@ export class AIStrategyFactory {
      * @returns Стратегия по умолчанию
      */
     public static getDefaultStrategy(vehicle: Vehicle, scene: MainScene): AIStrategy {
+        AIStrategyFactory.ensureInitialized();
+        
+        // Ленивая загрузка классов для избежания циклических зависимостей
         if (vehicle instanceof Ship) {
-            const strategy = new DefaultShipStrategy();
+            const StrategyClass = AIStrategyFactory.DefaultShipStrategyClass;
+            const strategy = new StrategyClass();
             strategy.initialize(vehicle, scene);
             return strategy;
         } else if (vehicle instanceof Torpedo) {
-            const strategy = new HomingTorpedoStrategy();
+            const StrategyClass = AIStrategyFactory.HomingTorpedoStrategyClass;
+            const strategy = new StrategyClass();
             strategy.initialize(vehicle, scene);
             return strategy;
         }
         
         // Если не удалось определить тип, возвращаем пустую стратегию
-        const strategy = new DefaultShipStrategy();
+        const StrategyClass = AIStrategyFactory.DefaultShipStrategyClass;
+        const strategy = new StrategyClass();
         strategy.initialize(vehicle, scene);
         return strategy;
     }
@@ -88,6 +146,7 @@ export class AIStrategyFactory {
      * @returns Массив идентификаторов стратегий
      */
     public static getAvailableStrategies(): string[] {
+        AIStrategyFactory.ensureInitialized();
         return Array.from(AIStrategyFactory.strategies.keys());
     }
     

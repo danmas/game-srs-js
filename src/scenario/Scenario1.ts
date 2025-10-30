@@ -9,6 +9,7 @@ import { Submarine } from '../objects/Submarine';
 import { MainScene } from '../scenes/MainScene';
 import { Obstruction } from '../objects/Obstruction';
 import { CoordUtils } from '../utils/CoordUtils';
+import { AIStrategyFactory } from '../ai/strategies/AIStrategyFactory';
 
 /**
  * Первый сценарий игры - выход из порта и уничтожение вражеского корабля
@@ -74,6 +75,10 @@ export class Scenario1 extends Scenario {
     if ('setHealth' in ship) {
       (ship as any).setHealth(1000);
     }
+    
+    // Назначаем стратегию торгового корабля кораблю "Kashin"
+    AIStrategyFactory.assignStrategy('merchant_ship', ship, this.scene);
+    console.log(`Scenario1: стратегия 'merchant_ship' назначена кораблю Kashin (ID: ${ship.id})`);
     
     console.log('Scenario1: создание кораблей завершено');
     
