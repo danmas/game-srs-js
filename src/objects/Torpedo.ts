@@ -5,6 +5,8 @@ import { Constants } from '../utils/Constants';
 import { Settings } from '../utils/Settings';
 import { TorpedoParams } from './TorpedoParams';
 import { Statistic } from '../utils/Statistic';
+import { UniversalLogger, LogLevel } from '../utils/UniversalLogger';
+import { AILogger } from '../utils/AILogger';
 
 /**
  * Базовый класс торпеды
@@ -17,6 +19,7 @@ export class Torpedo extends Vehicle {
   protected maxTimeLifeSec: number = 0;
   protected params: TorpedoParams | null = null;
   public readonly entityType: string = 'Torpedo'; // Тип сущности для идентификации
+  public firedByShipId: number | null = null; // ID корабля, который запустил торпеду
   
   /**
    * Конструктор
@@ -91,6 +94,20 @@ export class Torpedo extends Vehicle {
     
     // Проверяем время жизни торпеды
     if (this.isTimeLifeEnd()) {
+      // Логируем промах - торпеда уничтожена без попадания
+      const weaponTypeName = this.getWeaponTypeName();
+      UniversalLogger.log(
+        `Torpedo expired without hitting target (lifeTime: ${this.maxTimeLifeSec}s)`,
+        `TORPEDO_MISS`,
+        LogLevel.INFO,
+        {
+          torpedoId: this.id,
+          weaponType: weaponTypeName,
+          firedByShipId: this.firedByShipId,
+          distanceTraveled: this.timeLive / 1000 * this.maxVelocity,
+          position: { x: this.x, y: this.y }
+        }
+      );
       this.destroy();
       return;
     }
@@ -142,8 +159,29 @@ export class Torpedo extends Vehicle {
         // Сообщаем о попадании
         console.log(`Hit the target ${ship}`);
         
-        // Наносим урон кораблю
-        ship.hasHit(this.damage);
+        const oldHealth = ship.getHealth();
+        const weaponTypeName = this.getWeaponTypeName();
+        
+        // Логируем попадание ДО нанесения урона (чтобы записать старое здоровье)
+        UniversalLogger.log(
+          `Torpedo hit target Ship ${ship.id} for ${this.damage} damage`,
+          `TORPEDO_HIT`,
+          LogLevel.INFO,
+          {
+            torpedoId: this.id,
+            targetShipId: ship.id,
+            weaponType: weaponTypeName,
+            firedByShipId: this.firedByShipId,
+            damage: this.damage,
+            targetHealthBefore: oldHealth,
+            distance: dist.toFixed(2),
+            targetPosition: { x: ship.x, y: ship.y },
+            torpedoPosition: { x: this.x, y: this.y }
+          }
+        );
+        
+        // Наносим урон кораблю (там тоже будет логирование изменения здоровья)
+        ship.hasHit(this.damage, this.firedByShipId);
         
         // Увеличиваем статистику попаданий
         if (this.forces === Constants.FORCES_RED) {
@@ -164,6 +202,22 @@ export class Torpedo extends Vehicle {
    */
   public getWeaponType(): number {
     return this.weaponType;
+  }
+  
+  /**
+   * Получает имя типа оружия для логирования
+   */
+  private getWeaponTypeName(): string {
+    switch (this.weaponType) {
+      case Constants.WEAPON_SELECT_TORP_I:
+        return 'Torpedo I';
+      case Constants.WEAPON_SELECT_TORP_II:
+        return 'Torpedo II';
+      case Constants.WEAPON_SELECT_TORP_III:
+        return 'Torpedo III';
+      default:
+        return 'Unknown';
+    }
   }
   
   /**

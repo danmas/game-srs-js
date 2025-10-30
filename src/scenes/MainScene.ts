@@ -560,25 +560,25 @@ export class MainScene extends Phaser.Scene {
     // Обновление ИИ кораблей
     for (const ship of this.redShips) {
       if (!ship.isUnderControl()) {
-        UniversalLogger.debug(`Calling AI_step_I for red ship ${ship.id}`, 'AI_LOOP');
+        UniversalLogger.info(`Calling AI_step_I for red ship ${ship.id}`, 'AI_LOOP');
         ship.AI_step_I();
       }
     }
     for (const ship of this.whiteShips) {
       if (!ship.isUnderControl()) {
-        UniversalLogger.debug(`Calling AI_step_I for white ship ${ship.id}`, 'AI_LOOP');
+        UniversalLogger.info(`Calling AI_step_I for white ship ${ship.id}`, 'AI_LOOP');
         ship.AI_step_I();
       }
     }
     for (const ship of this.redShips) {
       if (!ship.isUnderControl()) {
-        UniversalLogger.debug(`Calling AI_step_II for red ship ${ship.id}`, 'AI_LOOP');
+        UniversalLogger.info(`Calling AI_step_II for red ship ${ship.id}`, 'AI_LOOP');
         ship.AI_step_II();
       }
     }
     for (const ship of this.whiteShips) {
       if (!ship.isUnderControl()) {
-        UniversalLogger.debug(`Calling AI_step_II for white ship ${ship.id}`, 'AI_LOOP');
+        UniversalLogger.info(`Calling AI_step_II for white ship ${ship.id}`, 'AI_LOOP');
         ship.AI_step_II();
       }
     }
@@ -846,6 +846,35 @@ export class MainScene extends Phaser.Scene {
           if (!this.myShip.isMovingOnWayPoint) {
             this.myShip.startMoveOnWP();
           }
+          
+          // Логируем установку WayPoint игроком
+          UniversalLogger.log(
+            `Player added WayPoint to ${this.myShip.entityType} ${this.myShip.id} at (${logicalClickPoint.x.toFixed(0)}, ${logicalClickPoint.y.toFixed(0)})`,
+            `PLAYER_ACTION`,
+            LogLevel.INFO,
+            {
+              action: 'addWayPoint',
+              entityId: this.myShip.id,
+              entityType: this.myShip.entityType,
+              wayPointPosition: { x: logicalClickPoint.x, y: logicalClickPoint.y },
+              shipPosition: { x: this.myShip.x, y: this.myShip.y },
+              totalWayPoints: this.myShip.getWayPoints().length
+            }
+          );
+        } else {
+          // Логируем удаление WayPoint
+          UniversalLogger.log(
+            `Player deleted WayPoint from ${this.myShip.entityType} ${this.myShip.id}`,
+            `PLAYER_ACTION`,
+            LogLevel.INFO,
+            {
+              action: 'deleteWayPoint',
+              entityId: this.myShip.id,
+              entityType: this.myShip.entityType,
+              clickPosition: { x: logicalClickPoint.x, y: logicalClickPoint.y },
+              remainingWayPoints: this.myShip.getWayPoints().length
+            }
+          );
         }
         // Обновляем отображение WP для myShip, если он выбран (что скорее всего так, если мы им управляем)
         if (this.myShip.isSelected()) {
@@ -1830,6 +1859,11 @@ export class MainScene extends Phaser.Scene {
       targetX, // Передаем исходные targetX, targetY для WP торпеды TypeII
       targetY
     );
+
+    // 3.5. Устанавливаем ID корабля, который запустил торпеду (для логирования)
+    if (torpedo) {
+      torpedo.firedByShipId = ship.id;
+    }
 
     // 4. Обновляем информер (если торпеда успешно создана)
     // Эту логику можно оставить здесь или перенести в AIWeaponControl/PlayerControls

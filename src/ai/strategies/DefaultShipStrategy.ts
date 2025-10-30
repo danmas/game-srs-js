@@ -70,6 +70,28 @@ export class DefaultShipStrategy extends BaseAIStrategy {
             AILogger.log(ship, this.name, "Maintain Max Speed", `Health low (${ship.getHealth()}), but already at full power.`, LogLevel.WARN, { ...context });
         }
         
+        // Логируем периодическое состояние ИИ (каждые 5 секунд) для отслеживания активности
+        const currentTime = context.gameTime;
+        const lastLogTime = (ship as any).__lastAILogTime || 0;
+        if (currentTime - lastLogTime > 5000) {
+            (ship as any).__lastAILogTime = currentTime;
+            UniversalLogger.info(
+                `AI Status - ${ship.entityType} ${ship.id} (${this.name}): Health=${ship.getHealth()}, Power=${ship.getPower()}, Targets=${ship.perceivedTargets.size}, CurrentTarget=${this.targetId || 'none'}`,
+                `AI_STATUS_${ship.id}`,
+                {
+                    entityId: ship.id,
+                    strategy: this.name,
+                    health: ship.getHealth(),
+                    power: ship.getPower(),
+                    targetCount: ship.perceivedTargets.size,
+                    currentTarget: this.targetId,
+                    position: { x: ship.x, y: ship.y },
+                    direction: ship.getDirection(),
+                    speed: ship.getSpeed()
+                }
+            );
+        }
+        
         // Поиск цели для атаки
         const prevTargetId = this.targetId;
         this.findTarget(ship, context);
@@ -90,7 +112,7 @@ export class DefaultShipStrategy extends BaseAIStrategy {
                     distance: distance
                 });
             } else {
-                AILogger.log(ship, this.name, "No Target", "No suitable enemies in ZONE_2+.", LogLevel.DEBUG, { ...context });
+                AILogger.log(ship, this.name, "No Target", "No suitable enemies in ZONE_2+.", LogLevel.INFO, { ...context });
             }
         }
     }
@@ -149,7 +171,7 @@ export class DefaultShipStrategy extends BaseAIStrategy {
             this.attackTarget(ship, context);
         } else {
             // Лог idle только если изменилось (e.g., потеряли цель)
-            AILogger.log(ship, this.name, "Patrol Mode", "No target: continue waypoint navigation.", LogLevel.DEBUG, { ...context });
+            AILogger.log(ship, this.name, "Patrol Mode", "No target: continue waypoint navigation.", LogLevel.INFO, { ...context });
         }
         
         // Управление движением по WayPoints
@@ -174,7 +196,31 @@ export class DefaultShipStrategy extends BaseAIStrategy {
                  perceivedInfo.detectionState === DetectionState.ZONE_3_IDENTIFIED)) {
                 
                 if (perceivedInfo.targetVehicle instanceof Ship) {
+                    const oldTargetId = this.targetId;
                     this.targetId = id;
+                    
+                    // Логируем выбор новой цели
+                    if (oldTargetId !== id) {
+                        const distance = Phaser.Math.Distance.Between(
+                            ship.x, ship.y,
+                            perceivedInfo.targetVehicle.x, perceivedInfo.targetVehicle.y
+                        );
+                        AILogger.log(
+                            ship,
+                            this.name,
+                            "Target Acquired",
+                            `New target: ${perceivedInfo.targetVehicle.entityType} ID ${id} at distance ${distance.toFixed(0)}m, DetectionState=${perceivedInfo.detectionState}`,
+                            LogLevel.INFO,
+                            {
+                                targetId: id,
+                                targetType: perceivedInfo.targetVehicle.entityType,
+                                distance: distance,
+                                detectionState: perceivedInfo.detectionState,
+                                position: { x: ship.x, y: ship.y },
+                                targetPosition: { x: perceivedInfo.targetVehicle.x, y: perceivedInfo.targetVehicle.y }
+                            }
+                        );
+                    }
                     break;
                 }
             }
@@ -215,7 +261,7 @@ export class DefaultShipStrategy extends BaseAIStrategy {
         
         // Логируем причины, по которым не можем атаковать
         if (!weaponReady) {
-            AILogger.log(ship, this.name, "Hold Fire", `Torpedo I not ready (reload time).`, LogLevel.DEBUG, { ...context, weapon: Constants.WEAPON_SELECT_TORP_I });
+            AILogger.log(ship, this.name, "Hold Fire", `Torpedo I not ready (reload time).`, LogLevel.INFO, { ...context, weapon: Constants.WEAPON_SELECT_TORP_I });
             return;
         }
         
@@ -247,11 +293,30 @@ export class DefaultShipStrategy extends BaseAIStrategy {
             targetId: target.id
         });
         
-        this.scene.fireTorpedo(
+        const torpedo = this.scene.fireTorpedo(
             ship,
             Constants.WEAPON_SELECT_TORP_I,
             targetTruePosition.x,
             targetTruePosition.y
         );
+        
+        // Логируем успешный/неуспешный запуск торпеды
+        if (torpedo) {
+            AILogger.log(ship, this.name, "Torpedo Launched", 
+                `Torpedo ${torpedo.id} launched at target ${target.id}`, 
+                LogLevel.INFO, 
+                { 
+                    torpedoId: torpedo.id,
+                    targetId: target.id,
+                    targetPosition: { x: targetTruePosition.x, y: targetTruePosition.y }
+                }
+            );
+        } else {
+            AILogger.log(ship, this.name, "Torpedo Launch Failed", 
+                `Failed to launch torpedo at target ${target.id}`, 
+                LogLevel.WARN, 
+                { targetId: target.id }
+            );
+        }
     }
 }

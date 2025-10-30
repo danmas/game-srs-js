@@ -700,7 +700,27 @@ export class Vehicle extends Phaser.GameObjects.Sprite {
    */
   public setPower(newPower: number): void {
     if (newPower >= Vehicle.POWER_0 && newPower <= Vehicle.POWER_6) {
+      const oldPower = this.power;
       this.power = newPower;
+      
+      // Логируем изменение мощности для кораблей под управлением игрока
+      if (this.underControl && oldPower !== newPower) {
+        UniversalLogger.log(
+          `Player changed ${this.entityType} ${this.id} power from ${oldPower} to ${newPower}`,
+          `PLAYER_ACTION`,
+          LogLevel.INFO,
+          {
+            action: 'setPower',
+            entityId: this.id,
+            entityType: this.entityType,
+            oldPower: oldPower,
+            newPower: newPower,
+            position: { x: this.x, y: this.y },
+            direction: this.getDirection(),
+            speed: this.getSpeed()
+          }
+        );
+      }
     }
   }
   
@@ -871,7 +891,39 @@ export class Vehicle extends Phaser.GameObjects.Sprite {
    */
   public setRudder(newRudder: number): void {
     if (newRudder >= Vehicle.RUDER_RIGHT_15 && newRudder <= Vehicle.RUDER_LEFT_15) {
+      const oldRudder = this.rudder;
       this.rudder = newRudder;
+      
+      // Логируем изменение руля для кораблей под управлением игрока
+      if (this.underControl && oldRudder !== newRudder) {
+        const rudderNames: { [key: number]: string } = {
+          [Vehicle.RUDER_RIGHT_15]: 'Right 15°',
+          [Vehicle.RUDER_RIGHT_10]: 'Right 10°',
+          [Vehicle.RUDER_RIGHT_5]: 'Right 5°',
+          [Vehicle.RUDER_0]: 'Center',
+          [Vehicle.RUDER_LEFT_5]: 'Left 5°',
+          [Vehicle.RUDER_LEFT_10]: 'Left 10°',
+          [Vehicle.RUDER_LEFT_15]: 'Left 15°'
+        };
+        
+        UniversalLogger.log(
+          `Player changed ${this.entityType} ${this.id} rudder from ${rudderNames[oldRudder] || oldRudder} to ${rudderNames[newRudder] || newRudder}`,
+          `PLAYER_ACTION`,
+          LogLevel.INFO,
+          {
+            action: 'setRudder',
+            entityId: this.id,
+            entityType: this.entityType,
+            oldRudder: oldRudder,
+            newRudder: newRudder,
+            oldRudderName: rudderNames[oldRudder] || `Unknown(${oldRudder})`,
+            newRudderName: rudderNames[newRudder] || `Unknown(${newRudder})`,
+            position: { x: this.x, y: this.y },
+            direction: this.getDirection(),
+            speed: this.getSpeed()
+          }
+        );
+      }
     }
     
     // Обновляем интерфейс, если корабль под контролем
@@ -1227,7 +1279,7 @@ export class Vehicle extends Phaser.GameObjects.Sprite {
   public AI_step_I(): void {
     if (!this.active || !this.aiStrategy) return;
     
-    UniversalLogger.debug(`AI_step_I called for ${this.entityType} ${this.id}`, 'AI_STEP_I');
+    UniversalLogger.info(`AI_step_I called for ${this.entityType} ${this.id}`, 'AI_STEP_I');
     
     // Подготовка контекста для ИИ
     const context: AIWorldContext = {
@@ -1247,7 +1299,7 @@ export class Vehicle extends Phaser.GameObjects.Sprite {
   public AI_step_II(): void {
     if (!this.active || !this.aiStrategy) return;
     
-    UniversalLogger.debug(`AI_step_II called for ${this.entityType} ${this.id}`, 'AI_STEP_II');
+    UniversalLogger.info(`AI_step_II called for ${this.entityType} ${this.id}`, 'AI_STEP_II');
     
     // Подготовка контекста для ИИ
     const context: AIWorldContext = {

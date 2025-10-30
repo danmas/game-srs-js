@@ -5,6 +5,7 @@ import { Settings } from '../utils/Settings';
 import { TorpedoTypeI } from './TorpedoTypeI';
 import { MainScene } from '../scenes/MainScene';
 import { CoordUtils } from '../utils/CoordUtils';
+import { UniversalLogger, LogLevel } from '../utils/UniversalLogger';
 
 /**
  * Класс подводной лодки
@@ -195,11 +196,33 @@ export class Submarine extends Ship {
    * @param newDepth Новая глубина
    */
   public setSubmDepth(newDepth: number): void {
+    const oldDepth = this.depth;
+    
     // Ограничиваем глубину допустимыми пределами
     this.depth = Phaser.Math.Clamp(newDepth, 0, this.maxDepth);
     
     // Если глубина 0, то устанавливаем перископ
     this.periscope = (this.depth === 0);
+    
+    // Логируем изменение глубины для подлодок под управлением игрока
+    if (this.underControl && oldDepth !== this.depth) {
+      UniversalLogger.log(
+        `Player changed Submarine ${this.id} depth from ${oldDepth}m to ${this.depth}m`,
+        `PLAYER_ACTION`,
+        LogLevel.INFO,
+        {
+          action: 'setDepth',
+          entityId: this.id,
+          entityType: this.entityType,
+          oldDepth: oldDepth,
+          newDepth: this.depth,
+          periscopeRaised: this.periscope,
+          position: { x: this.x, y: this.y },
+          direction: this.getDirection(),
+          speed: this.getSpeed()
+        }
+      );
+    }
     
     // Перерисовываем подлодку
     this.drawVehicle();
@@ -219,6 +242,22 @@ export class Submarine extends Ship {
     if (this.depth <= 50) { // Перископ можно поднять только на малой глубине
       this.periscope = true;
       this.drawVehicle();
+      
+      // Логируем действие игрока
+      if (this.underControl) {
+        UniversalLogger.log(
+          `Player raised periscope on Submarine ${this.id}`,
+          `PLAYER_ACTION`,
+          LogLevel.INFO,
+          {
+            action: 'raisePeriscope',
+            entityId: this.id,
+            entityType: this.entityType,
+            depth: this.depth,
+            position: { x: this.x, y: this.y }
+          }
+        );
+      }
     }
   }
   
@@ -228,6 +267,22 @@ export class Submarine extends Ship {
   public lowerPeriscope(): void {
     this.periscope = false;
     this.drawVehicle();
+    
+    // Логируем действие игрока
+    if (this.underControl) {
+      UniversalLogger.log(
+        `Player lowered periscope on Submarine ${this.id}`,
+        `PLAYER_ACTION`,
+        LogLevel.INFO,
+        {
+          action: 'lowerPeriscope',
+          entityId: this.id,
+          entityType: this.entityType,
+          depth: this.depth,
+          position: { x: this.x, y: this.y }
+        }
+      );
+    }
   }
   
   /**
@@ -306,6 +361,26 @@ export class Submarine extends Ship {
         }
 
         console.log(`Submarine fireTorpedoTypeIPlayer: Delegated Torpedo I launch to MainScene for logical (${targetLogicalPoint.x}, ${targetLogicalPoint.y})`);
+        
+        // Логируем запуск торпеды игроком
+        UniversalLogger.log(
+          `Player fired Torpedo Type I from Submarine ${this.id} to target (${targetLogicalPoint.x.toFixed(0)}, ${targetLogicalPoint.y.toFixed(0)})`,
+          `PLAYER_ACTION`,
+          LogLevel.INFO,
+          {
+            action: 'fireTorpedo',
+            entityId: this.id,
+            entityType: this.entityType,
+            torpedoId: torpedo.id,
+            weaponType: 'Torpedo Type I',
+            targetPosition: { x: targetLogicalPoint.x, y: targetLogicalPoint.y },
+            firePosition: { x: this.x, y: this.y },
+            direction: this.getDirection(),
+            depth: this.depth,
+            torpedosRemaining: this.getTorpOnBoard(Constants.WEAPON_SELECT_TORP_I)
+          }
+        );
+        
         if (mainScene.informer) {
           mainScene.informer.setCommand("Торпеда I запущена!");
         }

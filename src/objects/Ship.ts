@@ -8,6 +8,7 @@ import { MainScene } from '../scenes/MainScene';
 import { AIWeaponControl } from '../ai/AIWeaponControl';
 import { AIStrategyFactory } from '../ai/strategies/AIStrategyFactory';
 import { UniversalLogger, LogLevel } from '../utils/UniversalLogger';
+import { AILogger } from '../utils/AILogger';
 
 /**
  * Класс корабля - базовый класс для всех кораблей и подводных лодок
@@ -303,8 +304,13 @@ export class Ship extends Vehicle {
   /**
    * Обрабатывает попадание в корабль
    * @param damage Нанесенный урон
+   * @param attackerId ID корабля, который нанес урон (если известен)
    */
-  public hasHit(damage: number): void {
+  public hasHit(damage: number, attackerId?: number | null): void {
+    const oldHealth = this.health;
+    const oldMaxVelocity = this.maxVelocity;
+    const wasDestroyed = this.health <= damage;
+    
     // Уменьшаем здоровье
     this.health -= damage;
     
@@ -314,8 +320,56 @@ export class Ship extends Vehicle {
     // Уменьшаем скорость
     this.maxVelocity /= Settings.HIT_SHIP_SPEED_DECREASE;
     
+    // Логируем изменение здоровья
+    const strategyName = this.aiStrategy?.name || 'Unknown';
+    UniversalLogger.log(
+      `Ship ${this.id} received ${damage} damage (${oldHealth} -> ${this.health})`,
+      `SHIP_DAMAGE`,
+      wasDestroyed ? LogLevel.ERROR : LogLevel.WARN,
+      {
+        shipId: this.id,
+        attackerId: attackerId || null,
+        damage: damage,
+        healthBefore: oldHealth,
+        healthAfter: this.health,
+        maxVelocityBefore: oldMaxVelocity,
+        maxVelocityAfter: this.maxVelocity,
+        strategy: strategyName,
+        position: { x: this.x, y: this.y }
+      }
+    );
+    
     // Проверяем, не уничтожен ли корабль
     if (this.health <= 0) {
+      // Логируем уничтожение корабля
+      UniversalLogger.log(
+        `Ship ${this.id} destroyed`,
+        `SHIP_DESTROYED`,
+        LogLevel.ERROR,
+        {
+          shipId: this.id,
+          finalHealth: this.health,
+          attackerId: attackerId || null,
+          strategy: strategyName,
+          position: { x: this.x, y: this.y }
+        }
+      );
+      
+      // Логируем через AILogger для стратегии
+      if (this.aiStrategy) {
+        AILogger.log(
+          this,
+          strategyName,
+          "Ship Destroyed",
+          `Ship destroyed by ${damage} damage. Final health: ${this.health}`,
+          LogLevel.ERROR,
+          {
+            attackerId: attackerId || null,
+            finalHealth: this.health
+          }
+        );
+      }
+      
       this.destroy();
     }
   }
