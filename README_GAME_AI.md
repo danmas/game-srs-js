@@ -4,12 +4,13 @@
 1. [Обзор Системы](#обзор-системы)
 2. [Архитектура ИИ](#архитектура-иИ)
 3. [Сенсорная Система (Обнаружение Целей)](#сенсорная-система-обнаружение-целей)
-4. [Алгоритмы Принятия Решений](#алгоритмы-принятия-решений)
-5. [Алгоритмы Управления Оружием](#алгоритмы-управления-оружием)
-6. [Алгоритмы Торпед](#алгоритмы-торпед)
-7. [Система Навигации (WayPoints)](#система-навигации-waypoints)
-8. [Физическая Модель](#физическая-модель)
-9. [Как Подключить Новые Алгоритмы](#как-подключить-новые-алгоритмы)
+4. [Система Стратегий ИИ](#система-стратегий-ии)
+5. [Алгоритмы Принятия Решений](#алгоритмы-принятия-решений)
+6. [Алгоритмы Управления Оружием](#алгоритмы-управления-оружием)
+7. [Алгоритмы Торпед](#алгоритмы-торпед)
+8. [Система Навигации (WayPoints)](#система-навигации-waypoints)
+9. [Физическая Модель](#физическая-модель)
+10. [Как Подключить Новые Алгоритмы](#как-подключить-новые-алгоритмы)
 
 ---
 
@@ -76,7 +77,7 @@ public slowLoop(time: number, delta: number): void {
 **Назначение:** Принятие решений, атака, управление
 
 **Выполняется в:**
-- `Ship.AI_step_II()` - управление оружием через `AIWeaponControl.evaluateAndFire()`
+- `Ship.AI_step_II()` - управление через систему стратегий (`aiStrategy.actionStep()`) или через `AIWeaponControl.evaluateAndFire()` для обратной совместимости
 - `Submarine.AI_step_II()` - специфичные действия подлодок
 - `Torpedo.AI_step_II()` - самонаведение для Type III
 
@@ -85,16 +86,24 @@ public slowLoop(time: number, delta: number): void {
 public AI_step_II(): void {
   if (!this.active || this.underControl) return;
   
-  if (!this.isConvoyShip && this.aiWeaponControl) {
-    this.aiWeaponControl.evaluateAndFire(); // Оценка и атака
+  // Вызываем базовую реализацию, которая использует aiStrategy
+  super.AI_step_II(); // Делегирует выполнение aiStrategy.actionStep()
+  
+  // Для обратной совместимости: если нет стратегии, используем старую логику
+  if (!this.aiStrategy) {
+    if (!this.isConvoyShip && this.aiWeaponControl) {
+      this.aiWeaponControl.evaluateAndFire(); // Оценка и атака
+    }
   }
   
   // Управление движением по WayPoints
-  if (this.wayPoints.length > 0 && !this.isMovingOnWayPoint) {
+  if (this.hasWayPoints() && !this.isMovingOnWayPoint) {
     // this.startMoveOnWP();
   }
 }
 ```
+
+**Примечание:** Современная система использует **систему стратегий** (`AIStrategy`). `AIWeaponControl` используется только для обратной совместимости. Подробнее см. `README_AI_STRATEGIES.md`.
 
 ### Состояния ИИ (moveState)
 
@@ -131,13 +140,14 @@ static readonly ST_WP_CONVOY_MOVING: number = 6;      // Движение в к�
 
 ```typescript
 // Vehicle.ts - getSourceNoiseLevel()
-sourceNoise = (3 * intrinsicNoisiness * 1000000 * powerFactor) / 36
+// Базовая формула (упрощенная для понимания):
+sourceNoise = (3 * intrinsicNoisiness * 1000000 * finalNoiseFactor) / 36
 receivedNoise = sourceNoise / (distance * distance)
 ```
 
 **Параметры:**
 - `intrinsicNoisiness` - базовая шумность (1.0 для Vehicle, 1.5 для Ship)
-- `powerFactor` - зависит от мощности:
+- `powerFactor` - базовый фактор мощности:
   - `POWER_0`: 0.05
   - `POWER_1`: 0.2
   - `POWER_2`: 1.0
@@ -145,6 +155,22 @@ receivedNoise = sourceNoise / (distance * distance)
   - `POWER_4`: 4.0
   - `POWER_5`: 5.0
   - `POWER_6`: 6.0
+
+**Важно:** Реальная формула учитывает **соотношение текущей скорости к максимальной** для данной мощности:
+
+```typescript
+// Реальная реализация учитывает скорость:
+speedRatio = currentSpeed / maxSpeedForCurrentPower
+scaledPowerFactor = powerFactor * speedRatio
+finalNoiseFactor = Math.max(scaledPowerFactor, 0.05) // Минимум 0.05
+
+// Если корабль движется медленнее максимума для своей мощности,
+// его шум пропорционально уменьшается
+```
+
+**Примеры:**
+- Корабль на `POWER_4` (maxSpeed = 20), но движется со скоростью 10 → шум будет 50% от максимального для POWER_4
+- Корабль только что получил команду `POWER_4`, но еще разгоняется → шум постепенно увеличивается с ростом скорости
 
 **Модификаторы для подводных лодок:**
 ```typescript
@@ -247,13 +273,82 @@ public perceivedTargets: Map<number, PerceivedTargetInfo>;
 
 ---
 
+## Система Стратегий ИИ
+
+### Обзор
+
+Современная система использует паттерн **"Стратегия"** для управления поведением ИИ. Каждый `Vehicle` может иметь назначенную стратегию (`aiStrategy`), которая реализует логику принятия решений.
+
+**Файлы:**
+- `src/ai/strategies/AIStrategy.ts` - интерфейс стратегии
+- `src/ai/strategies/BaseAIStrategy.ts` - базовый класс
+- `src/ai/strategies/AIStrategyFactory.ts` - фабрика стратегий
+- `src/ai/strategies/DefaultShipStrategy.ts` - стандартная стратегия корабля
+- `src/ai/strategies/AggressiveShipStrategy.ts` - агрессивная стратегия
+
+### Интеграция с Двухфазным Циклом
+
+```typescript
+// Vehicle.ts - AI_step_I()
+public AI_step_I(): void {
+  if (!this.active || !this.aiStrategy) return;
+  
+  const context: AIWorldContext = {
+    perceivedTargets: this.perceivedTargets,
+    scene: this.scene as MainScene,
+    gameTime: this.scene.time.now
+  };
+  
+  // Делегируем управление стратегии
+  this.aiStrategy.analyzeStep(this, context);
+}
+
+// Vehicle.ts - AI_step_II()
+public AI_step_II(): void {
+  if (!this.active || !this.aiStrategy) return;
+  
+  const context: AIWorldContext = {
+    perceivedTargets: this.perceivedTargets,
+    scene: this.scene as MainScene,
+    gameTime: this.scene.time.now
+  };
+  
+  // Делегируем управление стратегии
+  this.aiStrategy.actionStep(this, context);
+}
+```
+
+### Назначение Стратегий
+
+```typescript
+// Ship.ts - конструктор
+if (!this.underControl) {
+  // Назначаем стратегию ИИ по умолчанию
+  this.aiStrategy = AIStrategyFactory.getDefaultStrategy(this, scene as MainScene);
+}
+
+// Динамическая замена стратегии
+AIStrategyFactory.assignStrategy('aggressive_ship', ship, scene);
+```
+
+**Доступные стратегии:**
+- `default_ship` - стандартная боевая стратегия
+- `aggressive_ship` - агрессивное преследование
+- `homing_torpedo` - стратегия самонаводящейся торпеды
+
+**Подробнее:** См. полную документацию в `README_AI_STRATEGIES.md`.
+
+---
+
 ## Алгоритмы Принятия Решений
 
-### AIWeaponControl - Управление Оружием
+### AIWeaponControl - Управление Оружием (Legacy)
 
 **Файл:** `src/ai/AIWeaponControl.ts`
 
-Это основной компонент боевого ИИ для кораблей.
+**⚠️ ВАЖНО:** `AIWeaponControl` используется только для **обратной совместимости**. Современная система использует **систему стратегий** (`AIStrategy`). Подробнее см. раздел [Система Стратегий ИИ](#система-стратегий-ии) и `README_AI_STRATEGIES.md`.
+
+Этот компонент все еще присутствует в коде, но новые корабли получают стратегию через `AIStrategyFactory.getDefaultStrategy()`.
 
 #### Алгоритм Оценки и Атаки
 
@@ -340,12 +435,20 @@ TRP_ATACK__ANGLE_WARNING: 180     // Допустимый угол атаки (�
 ```typescript
 // Ship.ts - AI_step_I()
 public AI_step_I(): void {
-  // Если здоровье низкое, пытаемся уйти
-  if (this.health < 200 && this.power < Vehicle.POWER_4) {
-    this.setPower(Vehicle.POWER_4); // Увеличить скорость
+  // Вызываем базовую реализацию, которая использует aiStrategy
+  super.AI_step_I(); // Делегирует выполнение aiStrategy.analyzeStep()
+  
+  // Для обратной совместимости: если нет стратегии, используем старую логику
+  if (!this.aiStrategy) {
+    // Если здоровье низкое, пытаемся уйти
+    if (this.health < 200 && this.power < Vehicle.POWER_4) {
+      this.setPower(Vehicle.POWER_4); // Увеличить скорость
+    }
   }
 }
 ```
+
+**Примечание:** В современной системе эта логика реализована в стратегиях (например, `DefaultShipStrategy`). Данный код используется только для обратной совместимости.
 
 ---
 
@@ -567,7 +670,9 @@ public AI_step_II(): void {
 }
 ```
 
-#### Алгоритм Поиска Цели (Устаревший)
+#### Алгоритм Поиска Цели (AI_step_I)
+
+**Примечание:** `AI_step_I()` используется для **периодического обновления цели** (каждые 3 секунды), а `AI_step_II()` выполняется **каждые 500ms** для активного самонаведения.
 
 ```typescript
 // TorpedoTypeIII.ts - AI_step_I()
@@ -598,6 +703,10 @@ private findNoisestEnemyShip(): Ship | null {
   let maxNoiseShip: Ship | null = null;
   let maxNoise = 0;
   
+  const enemyShips = this.getForces() === Constants.FORCES_RED 
+    ? mainScene.getWhiteShips() 
+    : mainScene.getRedShips();
+  
   for (const ship of enemyShips) {
     const dist = Phaser.Math.Distance.Between(
       this.position.x, this.position.y,
@@ -617,6 +726,8 @@ private findNoisestEnemyShip(): Ship | null {
   return maxNoiseShip;
 }
 ```
+
+**Примечание:** Метод `findNoisestEnemyShip()` используется параллельно с логикой `AI_step_II()`. Первый периодически обновляет целевую цель (`targetShip`), второй постоянно корректирует направление движения к ближайшей слышимой цели.
 
 **Параметры:**
 ```typescript
