@@ -2,6 +2,11 @@ import Phaser from 'phaser';
 import { MainScene } from './scenes/MainScene';
 import { Settings } from './utils/Settings';
 
+// Логируем версию сборки в консоль браузера
+console.log(`%c🚀 Silent Red Storm ${BUILD_VERSION}`, 'color: #4CAF50; font-weight: bold; font-size: 14px;');
+console.log(`📦 Build Timestamp: ${BUILD_TIMESTAMP}`);
+console.log(`%c⚠️ Если торпеды стреляют неправильно - проверь что используется эта версия!`, 'color: #FF9800; font-weight: bold;');
+
 // Создаем стили для контейнера игры и страницы
 document.body.style.backgroundColor = '#333333'; // Темно-серый для всей страницы
 const styleElement = document.createElement('style');

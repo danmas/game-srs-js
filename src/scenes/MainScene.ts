@@ -117,6 +117,18 @@ export class MainScene extends Phaser.Scene {
     });
     UniversalLogger.log('MainScene.create() started', 'MAIN_SCENE', LogLevel.INFO);
     
+    // Логируем версию сборки для отладки
+    UniversalLogger.log(
+      `🔧 BUILD VERSION: ${BUILD_VERSION} | Built at: ${BUILD_TIMESTAMP}`,
+      'BUILD_INFO',
+      LogLevel.INFO,
+      { 
+        version: BUILD_VERSION, 
+        timestamp: BUILD_TIMESTAMP,
+        bundleHash: BUILD_VERSION.split('-').pop() // Последняя часть - уникальный хэш
+      }
+    );
+    
     // Создаем камеры для игры и UI
     this.setupCameras();
     

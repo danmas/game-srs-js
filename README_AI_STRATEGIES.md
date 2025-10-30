@@ -159,12 +159,133 @@ export class MyNewStrategy extends BaseAIStrategy {
 AIStrategyFactory.registerStrategy('my_new_strategy', MyNewStrategy);
 ```
 
+## ⚠️ КРИТИЧЕСКИ ВАЖНО: Система Координат и Углов
+
+### Навигационная Система Координат
+
+**Игра использует НАВИГАЦИОННУЮ систему координат, НЕ математическую!**
+
+#### Направления (градусы)
+- **0° = Север (вверх)** ⬆️
+- **90° = Восток (вправо)** ➡️
+- **180° = Юг (вниз)** ⬇️
+- **270° = Запад (влево)** ⬅️
+
+#### Преобразование в векторы движения
+
+**ПРАВИЛЬНО** для навигационной системы:
+```typescript
+const direction = vehicle.getDirection(); // В градусах
+const directionRad = Phaser.Math.DegToRad(direction); // Конвертация в радианы
+
+// Вектор движения:
+const velocityX = Math.sin(directionRad) * speed;  // X = sin для навигации
+const velocityY = -Math.cos(directionRad) * speed; // Y = -cos для навигации
+```
+
+**НЕПРАВИЛЬНО** (математическая система):
+```typescript
+// ❌ НЕ ИСПОЛЬЗУЙТЕ ТАК:
+const velocityX = Math.cos(direction) * speed;  // Это для математической системы!
+const velocityY = Math.sin(direction) * speed;  // Это для математической системы!
+```
+
+#### Проверка Правильности
+
+| Курс | sin(rad) | -cos(rad) | Вектор | Направление |
+|------|----------|-----------|--------|-------------|
+| 0°   | 0        | -1        | (0, -1)| Вверх ✓     |
+| 90°  | 1        | 0         | (1, 0) | Вправо ✓    |
+| 180° | 0        | 1         | (0, 1) | Вниз ✓      |
+| 270° | -1       | 0         | (-1, 0)| Влево ✓     |
+
+### Расчет Упреждения для Торпед
+
+**Пример из SilentHunterStrategy:**
+
+```typescript
+// 1. Получить направление цели (в градусах)
+const targetDir = target.getDirection();
+
+// 2. Конвертировать в радианы
+const targetDirRad = Phaser.Math.DegToRad(targetDir);
+
+// 3. Рассчитать дистанцию движения цели
+const predictTime = 20; // секунды
+const targetSpeed = target.getSpeed(); // узлы
+const targetTravelDist = (targetSpeed * predictTime / 60);
+
+// 4. ПРАВИЛЬНЫЙ расчет предсказанной позиции
+const predictX = target.x + Math.sin(targetDirRad) * targetTravelDist;
+const predictY = target.y - Math.cos(targetDirRad) * targetTravelDist;
+
+// 5. Запуск торпеды
+this.scene.fireTorpedo(sub, weaponType, predictX, predictY);
+```
+
+### Частые Ошибки
+
+#### ❌ Ошибка 1: Использование градусов вместо радианов
+```typescript
+// НЕПРАВИЛЬНО:
+const x = target.x + Math.sin(targetDir) * distance; // targetDir в градусах!
+```
+
+```typescript
+// ПРАВИЛЬНО:
+const dirRad = Phaser.Math.DegToRad(targetDir);
+const x = target.x + Math.sin(dirRad) * distance;
+```
+
+#### ❌ Ошибка 2: Математическая система вместо навигационной
+```typescript
+// НЕПРАВИЛЬНО (математическая):
+const x = target.x + Math.cos(dirRad) * distance;
+const y = target.y + Math.sin(dirRad) * distance;
+```
+
+```typescript
+// ПРАВИЛЬНО (навигационная):
+const x = target.x + Math.sin(dirRad) * distance;
+const y = target.y - Math.cos(dirRad) * distance; // Минус для Y!
+```
+
+#### ❌ Ошибка 3: Забыли знак минус для Y
+```typescript
+// НЕПРАВИЛЬНО:
+const y = target.y + Math.cos(dirRad) * distance; // Без минуса!
+```
+
+```typescript
+// ПРАВИЛЬНО:
+const y = target.y - Math.cos(dirRad) * distance; // С минусом!
+```
+
+### Утилиты для Работы с Углами
+
+```typescript
+// Получить угол между двумя точками (результат в радианах)
+const angleRad = Phaser.Math.Angle.Between(fromX, fromY, toX, toY);
+
+// Конвертировать в градусы (математическая система)
+let angleDegMath = Phaser.Math.RadToDeg(angleRad);
+
+// Конвертировать в навигационную систему (0° = вверх)
+let angleNav = (angleDegMath + 90 + 360) % 360;
+
+// Кратчайший угол между двумя направлениями
+const diff = Phaser.Math.Angle.ShortestBetween(currentDir, targetDir);
+```
+
+---
+
 ## API Справочник
 
 ### Vehicle
 
 Базовый класс для всех игровых объектов. Ключевые методы:
 
+- `getDirection(): number` - **возвращает направление в ГРАДУСАХ (0-360, навигационная система)**
 - `setPower(level: number)` - установка мощности двигателя (0-6)
 - `setRudder(position: number)` - установка положения руля (-3 до +3)
 - `addWayPoint(x: number, y: number, type: number)` - добавление путевой точки

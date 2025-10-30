@@ -2,6 +2,11 @@ const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
+const webpack = require('webpack');
+
+// Генерируем уникальный BUILD_ID на основе времени
+const BUILD_ID = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+const BUILD_VERSION = `${require('./package.json').version}-${BUILD_ID}`;
 
 module.exports = {
   entry: './src/index.ts',
@@ -39,6 +44,10 @@ module.exports = {
       patterns: [
         { from: 'src/assets', to: 'assets' }
       ]
+    }),
+    new webpack.DefinePlugin({
+      'BUILD_VERSION': JSON.stringify(BUILD_VERSION),
+      'BUILD_TIMESTAMP': JSON.stringify(new Date().toISOString())
     })
   ],
   devServer: {

@@ -10,6 +10,7 @@ import { AIWorldContext } from './AIStrategy';
 import { CoordUtils } from '../../utils/CoordUtils';
 import { AILogger } from '../../utils/AILogger';
 import { LogLevel } from '../../utils/UniversalLogger';
+import * as Phaser from 'phaser';
 
 /**
  * Стратегия для торгового корабля с торпедами.
@@ -37,30 +38,10 @@ export class MerchantShipStrategy extends BaseAIStrategy {
         const ship = owner as Ship;
         console.log(`[MerchantShipStrategy] analyzeStep continuing for Ship ${ship.id}`);
         
-        // Логируем периодическое состояние ИИ (каждые 5 секунд) для отслеживания активности
-        const currentTime = context.gameTime;
-        const lastLogTime = (ship as any).__lastAILogTime || 0;
-        if (currentTime - lastLogTime > 5000) {
-            (ship as any).__lastAILogTime = currentTime;
-            AILogger.log(
-                ship,
-                this.name,
-                "AI Status Report",
-                `Health=${ship.getHealth()}, Power=${ship.getPower()}, Targets=${ship.perceivedTargets.size}, CurrentThreat=${this.threatId || 'none'}`,
-                LogLevel.INFO,
-                {
-                    entityId: ship.id,
-                    strategy: this.name,
-                    health: ship.getHealth(),
-                    power: ship.getPower(),
-                    targetCount: ship.perceivedTargets.size,
-                    currentThreat: this.threatId,
-                    position: { x: ship.x, y: ship.y },
-                    direction: ship.getDirection(),
-                    speed: ship.getSpeed()
-                }
-            );
-        }
+        // Периодическое логирование статуса ИИ (общая функция)
+        this.logPeriodicStatus(ship, context, {
+            currentThreat: this.threatId
+        });
         
         // Обновляем поиск угрозы с определенным интервалом
         this.escapeUpdateTime += Settings.SLOW_LOOP_INTERVAL_MS;
@@ -69,11 +50,8 @@ export class MerchantShipStrategy extends BaseAIStrategy {
             this.findThreat(ship, context);
         }
         
-        // Если здоровье низкое, увеличиваем скорость для ухода
-        if (ship.getHealth() < 200 && ship.getPower() < Vehicle.POWER_4) {
-            ship.setPower(Vehicle.POWER_4);
-            AILogger.log(ship, this.name, "Increase Speed", `Health low (${ship.getHealth()}), increasing speed.`, LogLevel.WARN, { ...context });
-        }
+        // Автоматическая проверка здоровья и повышение скорости (общая функция)
+        this.checkHealthAndAdjustSpeed(ship, context, 200, Vehicle.POWER_4);
     }
     
     /**
@@ -278,7 +256,7 @@ export class MerchantShipStrategy extends BaseAIStrategy {
     }
     
     /**
-     * Убегание от угрозы
+     * Убегание от угрозы (использует общую функцию calculateEscapeDirection)
      */
     private escapeFromThreat(ship: Ship, threatInfo: any, context: AIWorldContext): void {
         if (!this.scene) return;
@@ -287,32 +265,23 @@ export class MerchantShipStrategy extends BaseAIStrategy {
         const threatPos = this.lastKnownThreatPosition || 
                          new Phaser.Math.Vector2(threatInfo.targetVehicle.x, threatInfo.targetVehicle.y);
         
-        // Вычисляем направление ОТ угрозы
-        const angleToThreat = Phaser.Math.Angle.Between(
-            ship.x, ship.y,
-            threatPos.x, threatPos.y
-        );
+        const shipPos = new Phaser.Math.Vector2(ship.x, ship.y);
         
-        // Угол убегания = противоположное направление (180° от угрозы)
-        const escapeAngleRad = angleToThreat + Math.PI;
-        const escapeAngleDeg = (Phaser.Math.RadToDeg(escapeAngleRad) + 360) % 360;
-        
-        // Рассчитываем точку убегания на определенном расстоянии
-        const escapeDistance = 800; // Дистанция убегания
-        const escapeX = ship.x + Math.cos(escapeAngleRad) * escapeDistance;
-        const escapeY = ship.y + Math.sin(escapeAngleRad) * escapeDistance;
+        // Вычисляем направление убегания (общая функция)
+        const escapeInfo = this.calculateEscapeDirection(shipPos, threatPos, 800);
         
         // Конвертируем в логические координаты
-        const escapePhaserPos = new Phaser.Math.Vector2(escapeX, escapeY);
-        const escapeLogicalPos = CoordUtils.phaserToLogical(escapePhaserPos);
+        const escapeLogicalPos = CoordUtils.phaserToLogical(escapeInfo.point);
         
-        // Устанавливаем WayPoint для убегания
-        ship.clearWayPoints();
-        ship.addWayPoint(escapeLogicalPos.x, escapeLogicalPos.y, Constants.WP_TYPE_MANEUVER);
-        
-        if (!ship.getIsMovingOnWayPoint()) {
-            ship.startMoveOnWP();
-        }
+        // Устанавливаем WayPoint для убегания (общая функция)
+        this.setManeuverWaypoint(
+            ship,
+            escapeLogicalPos.x,
+            escapeLogicalPos.y,
+            Constants.WP_TYPE_MANEUVER,
+            true,
+            true
+        );
         
         // Максимальная скорость для убегания
         if (ship.getPower() < Vehicle.POWER_5) {
@@ -323,82 +292,32 @@ export class MerchantShipStrategy extends BaseAIStrategy {
         ship['moveState'] = Vehicle.ST_WP_TORP_DEFENCE_MOVING;
         
         AILogger.log(ship, this.name, "Evading Threat", 
-            `Escaping from threat at angle ${escapeAngleDeg.toFixed(0)}° to distance ${escapeDistance}.`, 
-            LogLevel.WARN, { ...context, escapeAngle: escapeAngleDeg });
+            `Escaping from threat at angle ${escapeInfo.angleDeg.toFixed(0)}° to distance 800m.`, 
+            LogLevel.WARN, { ...context, escapeAngle: escapeInfo.angleDeg });
     }
     
     /**
      * Атака врага (враг очень близко и обнаружен)
+     * Использует общую функцию fireTorpedoAtTarget
      */
     private attackInEmergency(ship: Ship, target: Vehicle, context: AIWorldContext): void {
-        if (!this.scene || !(target instanceof Ship)) return;
+        if (!this.scene) return;
         
-        const targetShip = target as Ship;
-        
-        // Проверяем готовность оружия
-        const weaponReady = ship.isWeaponReady(Constants.WEAPON_SELECT_TORP_I);
-        if (!weaponReady) {
-            // Оружие не готово - продолжаем убегать
-            this.escapeFromThreat(ship, { targetVehicle: target }, context);
-            return;
-        }
-        
-        const targetTruePosition = targetShip.getTruePositionBeforeSensorEffects();
-        const distanceToTarget = Phaser.Math.Distance.Between(
-            ship.x, ship.y,
-            targetTruePosition.x, targetTruePosition.y
-        );
-        const angleToTargetRad = Phaser.Math.Angle.Between(
-            ship.x, ship.y,
-            targetTruePosition.x, targetTruePosition.y
-        );
-        let angleToTargetDeg = (Phaser.Math.RadToDeg(angleToTargetRad) + 90 + 360) % 360;
-        const diffAngle = Phaser.Math.Angle.ShortestBetween(ship.getDirection(), angleToTargetDeg);
-        
-        const distanceOk = distanceToTarget < Settings.TRP_I_DIST_EXECUTION;
-        const angleOk = Math.abs(diffAngle) < Settings.TRP_ATACK__ANGLE_WARNING;
-        
-        if (distanceOk && angleOk) {
-            // Стреляем!
-            AILogger.log(ship, this.name, "Attack", 
-                `Firing torpedo: enemy at ${distanceToTarget.toFixed(0)}m, angle diff: ${diffAngle.toFixed(1)}°.`, 
-                LogLevel.WARN, { ...context, targetId: target.id, distance: distanceToTarget, angleDiff: diffAngle });
-            
-            const torpedo = this.scene.fireTorpedo(
-                ship,
-                Constants.WEAPON_SELECT_TORP_I,
-                targetTruePosition.x,
-                targetTruePosition.y
-            );
-            
-            // Логируем результат выстрела
-            if (torpedo) {
-                AILogger.log(ship, this.name, "Torpedo Fired", 
-                    `Torpedo Type I fired successfully at target ${target.id} from distance ${distanceToTarget.toFixed(0)}m. Torpedo ID: ${torpedo.id}`, 
-                    LogLevel.WARN, { 
-                        ...context, 
-                        action: 'fireTorpedo',
-                        targetId: target.id, 
-                        torpedoId: torpedo.id,
-                        weaponType: Constants.WEAPON_SELECT_TORP_I,
-                        distance: distanceToTarget,
-                        angleDiff: diffAngle,
-                        targetPosition: { x: targetTruePosition.x, y: targetTruePosition.y },
-                        firePosition: { x: ship.x, y: ship.y },
-                        torpedosRemaining: ship.getTorpOnBoard(Constants.WEAPON_SELECT_TORP_I)
-                    });
-            } else {
-                AILogger.log(ship, this.name, "Torpedo Fire Failed", 
-                    `Failed to fire torpedo at target ${target.id}. Weapon may not be ready or other error.`, 
-                    LogLevel.ERROR, { 
-                        ...context, 
-                        targetId: target.id, 
-                        distance: distanceToTarget,
-                        weaponReady: weaponReady
-                    });
+        // Попытка выстрела через общую функцию (она сама проверит все условия)
+        const torpedo = this.fireTorpedoAtTarget(
+            ship,
+            target,
+            Constants.WEAPON_SELECT_TORP_I,
+            context,
+            {
+                requireDistance: Settings.TRP_I_DIST_EXECUTION,
+                requireAngle: Settings.TRP_ATACK__ANGLE_WARNING,
+                logAttempt: false // Не логируем каждую неудачную попытку, только успех
             }
-        } else {
-            // Не можем атаковать - продолжаем убегать
+        );
+        
+        // Если не смогли выстрелить - продолжаем убегать
+        if (!torpedo) {
             this.escapeFromThreat(ship, { targetVehicle: target }, context);
         }
     }

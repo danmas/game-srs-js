@@ -19,6 +19,7 @@ export class AIStrategyFactory {
     private static _AggressiveShipStrategy: (new () => AIStrategy) | null = null;
     private static _HomingTorpedoStrategy: (new () => AIStrategy) | null = null;
     private static _MerchantShipStrategy: (new () => AIStrategy) | null = null;
+    private static _SilentHunterStrategy: (new () => AIStrategy) | null = null;
     
     /**
      * Ленивые геттеры для загрузки классов стратегий
@@ -57,6 +58,14 @@ export class AIStrategyFactory {
         return AIStrategyFactory._MerchantShipStrategy!;
     }
     
+    private static get SilentHunterStrategyClass(): new () => AIStrategy {
+        if (!AIStrategyFactory._SilentHunterStrategy) {
+            const module = (require as any)('./SilentHunterStrategy');
+            AIStrategyFactory._SilentHunterStrategy = module.SilentHunterStrategy;
+        }
+        return AIStrategyFactory._SilentHunterStrategy!;
+    }
+    
     /**
      * Ленивая инициализация стандартных стратегий
      * Вызывается автоматически при первом использовании фабрики
@@ -69,6 +78,7 @@ export class AIStrategyFactory {
         AIStrategyFactory.registerStrategy('aggressive_ship', AIStrategyFactory.AggressiveShipStrategyClass);
         AIStrategyFactory.registerStrategy('homing_torpedo', AIStrategyFactory.HomingTorpedoStrategyClass);
         AIStrategyFactory.registerStrategy('merchant_ship', AIStrategyFactory.MerchantShipStrategyClass);
+        AIStrategyFactory.registerStrategy('silent_hunter', AIStrategyFactory.SilentHunterStrategyClass);
         
         AIStrategyFactory.initialized = true;
     }

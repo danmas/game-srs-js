@@ -80,6 +80,23 @@ export class Scenario1 extends Scenario {
     AIStrategyFactory.assignStrategy('merchant_ship', ship, this.scene);
     console.log(`Scenario1: стратегия 'merchant_ship' назначена кораблю Kashin (ID: ${ship.id})`);
     
+    // Создаем белую подводную лодку-охотник с AI стратегией "Тихий Охотник"
+    const hunterSubLogicalX = 500;
+    const hunterSubLogicalY = -200;
+    const hunterSub = this.scene.createEnemyShip(
+      CoordUtils.logicalToPhaserX(hunterSubLogicalX),
+      CoordUtils.logicalToPhaserY(hunterSubLogicalY),
+      Constants.FORCES_WHITE,
+      true // isSubmarine = true
+    );
+    hunterSub.setDirection(270); // Направление на запад
+    hunterSub.setPower(Vehicle.POWER_2);
+    hunterSub.setName("Hunter");
+    
+    // Назначаем стратегию "Тихий Охотник" подводной лодке
+    AIStrategyFactory.assignStrategy('silent_hunter', hunterSub, this.scene);
+    console.log(`Scenario1: стратегия 'silent_hunter' назначена подводной лодке Hunter (ID: ${hunterSub.id})`);
+    
     console.log('Scenario1: создание кораблей завершено');
     
     // Генерируем карту

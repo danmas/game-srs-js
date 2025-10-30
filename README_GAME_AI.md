@@ -993,6 +993,193 @@ protected override onWayPointSequenceFinished(): void {
 
 ---
 
+## ⚠️ КРИТИЧЕСКИ ВАЖНО: Навигационная Система Координат
+
+### Система Координат и Углов в Игре
+
+**Silent Red Storm использует НАВИГАЦИОННУЮ систему координат, а НЕ стандартную математическую!**
+
+Это критически важно понимать при разработке AI стратегий, расчете траекторий и прицеливании.
+
+#### Направления (градусы)
+
+| Градусы | Направление | Символ |
+|---------|-------------|--------|
+| **0°**  | **Север (вверх)** | ⬆️ |
+| **90°** | **Восток (вправо)** | ➡️ |
+| **180°** | **Юг (вниз)** | ⬇️ |
+| **270°** | **Запад (влево)** | ⬅️ |
+
+#### Преобразование Направления в Вектор Движения
+
+**ПРАВИЛЬНЫЙ метод (навигационная система):**
+
+```typescript
+// Получаем направление из Vehicle (в градусах)
+const direction = vehicle.getDirection(); // 0-360 градусов
+
+// Конвертируем в радианы
+const directionRad = Phaser.Math.DegToRad(direction);
+
+// НАВИГАЦИОННАЯ система: sin для X, -cos для Y
+const velocityX = Math.sin(directionRad) * speed;
+const velocityY = -Math.cos(directionRad) * speed;
+```
+
+**НЕПРАВИЛЬНЫЙ метод (математическая система):**
+
+```typescript
+// ❌ НЕ ИСПОЛЬЗУЙТЕ ТАК - ЭТО ДЛЯ МАТЕМАТИЧЕСКОЙ СИСТЕМЫ!
+const velocityX = Math.cos(directionRad) * speed;  // НЕПРАВИЛЬНО
+const velocityY = Math.sin(directionRad) * speed;  // НЕПРАВИЛЬНО
+```
+
+#### Таблица Проверки Правильности
+
+| Курс | `sin(rad)` | `-cos(rad)` | Вектор `(X, Y)` | Ожидаемое направление |
+|------|------------|-------------|-----------------|----------------------|
+| 0°   | 0          | -1          | `(0, -1)`       | Вверх ✓              |
+| 90°  | 1          | 0           | `(1, 0)`        | Вправо ✓             |
+| 180° | 0          | 1           | `(0, 1)`        | Вниз ✓               |
+| 270° | -1         | 0           | `(-1, 0)`       | Влево ✓              |
+
+### Примеры Использования в AI
+
+#### Пример 1: Расчет Упреждения для Торпеды
+
+```typescript
+// Получить курс цели (в градусах)
+const targetDirection = target.getDirection(); // 0-360°
+
+// Конвертировать в радианы
+const targetDirRad = Phaser.Math.DegToRad(targetDirection);
+
+// Рассчитать расстояние, которое пройдет цель
+const predictTime = 20; // секунды до попадания
+const targetSpeed = target.getSpeed(); // узлы
+const travelDistance = (targetSpeed * predictTime / 60);
+
+// ПРАВИЛЬНЫЙ расчет предсказанной позиции
+const predictedX = target.x + Math.sin(targetDirRad) * travelDistance;
+const predictedY = target.y - Math.cos(targetDirRad) * travelDistance; // Минус!
+
+// Запуск торпеды
+scene.fireTorpedo(submarine, weaponType, predictedX, predictedY);
+```
+
+#### Пример 2: Движение к Точке
+
+```typescript
+// Рассчитать угол к целевой точке
+const angleToTargetRad = Phaser.Math.Angle.Between(
+  ship.x, ship.y,
+  targetX, targetY
+);
+
+// Конвертировать в градусы (математическая система: 0° = вправо)
+let angleDegMath = Phaser.Math.RadToDeg(angleToTargetRad);
+
+// Конвертировать в навигационную систему (0° = вверх)
+let angleNav = (angleDegMath + 90 + 360) % 360;
+
+// Установить курс
+ship.setDirection(angleNav);
+```
+
+#### Пример 3: Маневр Уклонения
+
+```typescript
+// Рассчитать направление уклонения (перпендикулярно угрозе)
+const angleToThreat = Phaser.Math.Angle.Between(ship.x, ship.y, threat.x, threat.y);
+let angleDegMath = Phaser.Math.RadToDeg(angleToThreat);
+
+// Добавить 90° для перпендикулярного направления
+let evasionAngleDeg = (angleDegMath + 90 + 360) % 360;
+let evasionAngleRad = Phaser.Math.DegToRad(evasionAngleDeg);
+
+// Рассчитать точку уклонения
+const evasionDistance = 500;
+const evasionX = ship.x + Math.sin(evasionAngleRad) * evasionDistance;
+const evasionY = ship.y - Math.cos(evasionAngleRad) * evasionDistance;
+```
+
+### Частые Ошибки и Их Исправление
+
+#### ❌ Ошибка 1: Градусы вместо Радианов
+
+```typescript
+// НЕПРАВИЛЬНО:
+const x = ship.x + Math.sin(direction) * distance; // direction в градусах!
+
+// ПРАВИЛЬНО:
+const dirRad = Phaser.Math.DegToRad(direction);
+const x = ship.x + Math.sin(dirRad) * distance;
+```
+
+#### ❌ Ошибка 2: Математическая Система Вместо Навигационной
+
+```typescript
+// НЕПРАВИЛЬНО (работает для математической системы: 0° = вправо):
+const x = ship.x + Math.cos(dirRad) * distance;
+const y = ship.y + Math.sin(dirRad) * distance;
+
+// ПРАВИЛЬНО (навигационная система: 0° = вверх):
+const x = ship.x + Math.sin(dirRad) * distance;
+const y = ship.y - Math.cos(dirRad) * distance; // Обратите внимание на минус!
+```
+
+#### ❌ Ошибка 3: Забыли Минус для Y
+
+```typescript
+// НЕПРАВИЛЬНО:
+const y = ship.y + Math.cos(dirRad) * distance; // Забыли минус!
+
+// ПРАВИЛЬНО:
+const y = ship.y - Math.cos(dirRad) * distance; // С минусом!
+```
+
+### Реальный Код из Vehicle.ts
+
+Вот как это реализовано в базовом классе:
+
+```typescript
+// Vehicle.ts - updatePhysics()
+protected updatePhysics(delta: number): void {
+  // ... расчет скорости и направления ...
+  
+  // Установка вектора скорости в навигационной системе
+  if (currentSpeed > 0) {
+    this.velocity.setTo(0, -currentSpeed);        // Направление вверх (0°)
+    this.velocity.rotate(Phaser.Math.DegToRad(this.direction)); // Поворот на текущий курс
+  }
+  
+  // Обновление позиции
+  this.position.x += this.velocity.x * deltaSeconds;
+  this.position.y += this.velocity.y * deltaSeconds;
+}
+```
+
+### Утилиты Phaser для Углов
+
+```typescript
+// Угол между двумя точками (результат в радианах, математическая система)
+const angleRad = Phaser.Math.Angle.Between(x1, y1, x2, y2);
+
+// Конвертация радианы → градусы
+const angleDeg = Phaser.Math.RadToDeg(angleRad);
+
+// Конвертация градусы → радианы
+const angleRad = Phaser.Math.DegToRad(angleDeg);
+
+// Кратчайший угол между двумя направлениями (-180 до +180)
+const diff = Phaser.Math.Angle.ShortestBetween(currentAngle, targetAngle);
+
+// Нормализация угла к диапазону 0-360
+const normalized = (angle + 360) % 360;
+```
+
+---
+
 ## Физическая Модель
 
 ### Система Управления
