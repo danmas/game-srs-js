@@ -156,9 +156,9 @@ export class SilentHunterStrategy extends BaseAIStrategy {
         // Используем общую функцию для поиска торговых кораблей (медленные)
         this.targetId = this.findTargetByFilter(sub, context, {
             requireType: 'Ship',
-            maxSpeedFilter: 15, // Низкая скорость = торговый корабль
+            maxSpeedFilter: 105, // ФАКТИЧЕСКИ ВЫКЛЮЧАЕМ Низкая скорость = торговый корабль
             requireDetectionLevel: DetectionState.ZONE_1_UNCERTAIN,
-            excludeAllies: true
+            excludeAllies: false  // Если цель в конвое, включи
         });
 
         // Логируем только при изменении цели
