@@ -361,15 +361,42 @@ export class MerchantShipStrategy extends BaseAIStrategy {
         if (distanceOk && angleOk) {
             // Стреляем!
             AILogger.log(ship, this.name, "Attack", 
-                `Firing torpedo: enemy at ${distanceToTarget.toFixed(0)}.`, 
-                LogLevel.WARN, { ...context, targetId: target.id, distance: distanceToTarget });
+                `Firing torpedo: enemy at ${distanceToTarget.toFixed(0)}m, angle diff: ${diffAngle.toFixed(1)}°.`, 
+                LogLevel.WARN, { ...context, targetId: target.id, distance: distanceToTarget, angleDiff: diffAngle });
             
-            this.scene.fireTorpedo(
+            const torpedo = this.scene.fireTorpedo(
                 ship,
                 Constants.WEAPON_SELECT_TORP_I,
                 targetTruePosition.x,
                 targetTruePosition.y
             );
+            
+            // Логируем результат выстрела
+            if (torpedo) {
+                AILogger.log(ship, this.name, "Torpedo Fired", 
+                    `Torpedo Type I fired successfully at target ${target.id} from distance ${distanceToTarget.toFixed(0)}m. Torpedo ID: ${torpedo.id}`, 
+                    LogLevel.WARN, { 
+                        ...context, 
+                        action: 'fireTorpedo',
+                        targetId: target.id, 
+                        torpedoId: torpedo.id,
+                        weaponType: Constants.WEAPON_SELECT_TORP_I,
+                        distance: distanceToTarget,
+                        angleDiff: diffAngle,
+                        targetPosition: { x: targetTruePosition.x, y: targetTruePosition.y },
+                        firePosition: { x: ship.x, y: ship.y },
+                        torpedosRemaining: ship.getTorpOnBoard(Constants.WEAPON_SELECT_TORP_I)
+                    });
+            } else {
+                AILogger.log(ship, this.name, "Torpedo Fire Failed", 
+                    `Failed to fire torpedo at target ${target.id}. Weapon may not be ready or other error.`, 
+                    LogLevel.ERROR, { 
+                        ...context, 
+                        targetId: target.id, 
+                        distance: distanceToTarget,
+                        weaponReady: weaponReady
+                    });
+            }
         } else {
             // Не можем атаковать - продолжаем убегать
             this.escapeFromThreat(ship, { targetVehicle: target }, context);
