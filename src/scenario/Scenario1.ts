@@ -93,9 +93,44 @@ export class Scenario1 extends Scenario {
     hunterSub.setPower(Vehicle.POWER_2);
     hunterSub.setName("Hunter");
     
-    // Назначаем стратегию "Тихий Охотник" подводной лодке
-    AIStrategyFactory.assignStrategy('silent_hunter', hunterSub, this.scene);
-    console.log(`Scenario1: стратегия 'silent_hunter' назначена подводной лодке Hunter (ID: ${hunterSub.id})`);
+    // Назначаем DSL стратегию "Агрессивный охотник" подводной лодке
+    const aggressiveHunterDSL = `
+strategy: "Агрессивный охотник"
+description: "Атакует ближайшие цели"
+
+ON ANALYZE:
+  - FIND:
+      best_target:
+        type: ship
+        range: 1000
+        detection_zone: 2
+
+ON ACTION:
+  IF:
+    condition: best_target IS_PRESENT AND weapon_I IS_READY
+    actions:
+      - Action:
+          ATTACK:
+            with: best_target
+            torpedo: weapon_I
+            predict_lead_time: 10
+  ELSE IF:
+    condition: best_target IS_PRESENT
+    actions:
+      - Action:
+          CHASE:
+            target: best_target
+            distance: 500
+            power: 4
+            angle_offset: 0
+  ELSE:
+    actions:
+      - Action:
+          PATROL:
+            power: 3
+`;
+    AIStrategyFactory.assignStrategyFromDSL(aggressiveHunterDSL, hunterSub, this.scene);
+    console.log(`Scenario1: DSL стратегия 'Агрессивный охотник' назначена подводной лодке Hunter (ID: ${hunterSub.id})`);
     
     console.log('Scenario1: создание кораблей завершено');
     

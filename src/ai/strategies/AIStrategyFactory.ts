@@ -4,6 +4,7 @@ import { Torpedo } from '../../objects/Torpedo';
 import { MainScene } from '../../scenes/MainScene';
 import { AIStrategy } from './AIStrategy';
 import { AILogger } from '../../utils/AILogger';
+import { DSLStrategy } from '../dsl/DSLStrategy';
 
 /**
  * Фабрика для создания и управления стратегиями ИИ.
@@ -190,5 +191,43 @@ export class AIStrategyFactory {
             console.error("Ошибка в сгенерированном коде ИИ:", e);
             return null;
         }
+    }
+    
+    /**
+     * Создает стратегию из YAML DSL описания
+     * @param dslYaml Строка с YAML описанием стратегии на DSL
+     * @param scene Игровая сцена
+     * @returns Экземпляр стратегии или null в случае ошибки
+     */
+    public static createStrategyFromDSL(dslYaml: string, scene: MainScene): AIStrategy | null {
+        try {
+            // Ленивая загрузка DSLStrategy для избежания циклических зависимостей
+            const module = (require as any)('../dsl/DSLStrategy');
+            const DSLStrategyClass = module.DSLStrategy;
+            
+            // Создаем экземпляр DSL стратегии
+            const strategy = new DSLStrategyClass(dslYaml, scene);
+            return strategy;
+        } catch (e) {
+            console.error("Ошибка при создании DSL стратегии:", e);
+            return null;
+        }
+    }
+    
+    /**
+     * Создает и назначает DSL стратегию объекту
+     * @param dslYaml Строка с YAML описанием стратегии на DSL
+     * @param vehicle Объект, которому назначается стратегия
+     * @param scene Игровая сцена
+     * @returns true, если стратегия успешно создана и назначена
+     */
+    public static assignStrategyFromDSL(dslYaml: string, vehicle: Vehicle, scene: MainScene): boolean {
+        const strategy = AIStrategyFactory.createStrategyFromDSL(dslYaml, scene);
+        if (!strategy) return false;
+        
+        strategy.initialize(vehicle, scene);
+        vehicle.aiStrategy = strategy;
+        AILogger.changeLogContext(vehicle, strategy.name);
+        return true;
     }
 }
