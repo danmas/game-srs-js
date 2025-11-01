@@ -282,6 +282,9 @@ export abstract class BaseAIStrategy implements AIStrategy {
         const approachX = fromPos.x + Math.cos(approachAngleRad) * approachDistance;
         const approachY = fromPos.y + Math.sin(approachAngleRad) * approachDistance;
         
+        // DEBUG лог
+        UniversalLogger.debug(`Calculated approach: from (${fromPos.x.toFixed(0)}, ${fromPos.y.toFixed(0)}) to (${targetPos.x.toFixed(0)}, ${targetPos.y.toFixed(0)}), offset ${Phaser.Math.RadToDeg(angleOffset).toFixed(0)}°, point (${approachX.toFixed(0)}, ${approachY.toFixed(0)}), angle ${approachAngleDeg.toFixed(0)}°`, 'AI_CALC_APPROACH');
+        
         return {
             angle: approachAngleRad,
             angleDeg: approachAngleDeg,
@@ -294,8 +297,8 @@ export abstract class BaseAIStrategy implements AIStrategy {
      */
     protected setManeuverWaypoint(
         vehicle: Vehicle,
-        x: number,
-        y: number,
+        logicalX: number,
+        logicalY: number,
         type: number = Constants.WP_TYPE_MANEUVER,
         autoStart: boolean = true,
         clearPrevious: boolean = true
@@ -304,11 +307,14 @@ export abstract class BaseAIStrategy implements AIStrategy {
             vehicle.clearWayPoints();
         }
         
-        vehicle.addWayPoint(x, y, type);
+        vehicle.addWayPoint(logicalX, logicalY, type);
         
         if (autoStart && !vehicle.getIsMovingOnWayPoint()) {
             vehicle.startMoveOnWP();
         }
+        
+        // DEBUG лог
+        UniversalLogger.debug(`Set waypoint for ${vehicle.entityType} ${vehicle.id}: logical (${logicalX.toFixed(0)}, ${logicalY.toFixed(0)}), type ${type}, autoStart ${autoStart}`, 'AI_SET_WAYPOINT', { vehicleId: vehicle.id });
     }
     
     /**

@@ -102,7 +102,7 @@ ON ANALYZE:
   - FIND:
       best_target:
         type: ship
-        range: 1000
+        range: 1500
         detection_zone: 2
 
 ON ACTION:
@@ -113,7 +113,7 @@ ON ACTION:
           ATTACK:
             with: best_target
             torpedo: weapon_I
-            predict_lead_time: 10
+            predict_lead_time: 0
   ELSE IF:
     condition: best_target IS_PRESENT
     actions:
@@ -121,8 +121,9 @@ ON ACTION:
           CHASE:
             target: best_target
             distance: 500
-            power: 4
+            power: 6  // Увеличено для теста
             angle_offset: 0
+            depth: 100
   ELSE:
     actions:
       - Action:

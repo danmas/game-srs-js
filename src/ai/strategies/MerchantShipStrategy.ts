@@ -321,5 +321,45 @@ export class MerchantShipStrategy extends BaseAIStrategy {
             this.escapeFromThreat(ship, { targetVehicle: target }, context);
         }
     }
+
+    private evadeThreat(ship: Ship, context: AIWorldContext): void {
+        if (this.threatId === null || !this.lastKnownThreatPosition) return;
+
+        const shipPos = new Phaser.Math.Vector2(ship.x, ship.y);
+
+        // Добавляем случайный offset к углу уклонения для непредсказуемости
+        const randomOffset = Phaser.Math.Between(-20, 20); // ±20 градусов
+        const escapeInfo = this.calculateEscapeDirection(
+            shipPos,
+            this.lastKnownThreatPosition,
+            800
+        );
+
+        // Применяем offset к углу
+        const escapeAngleRad = escapeInfo.angle + Phaser.Math.DegToRad(randomOffset);
+        const escapeX = shipPos.x + Math.cos(escapeAngleRad) * 800;
+        const escapeY = shipPos.y + Math.sin(escapeAngleRad) * 800;
+        const adjustedEscapePoint = new Phaser.Math.Vector2(escapeX, escapeY);
+
+        // Конвертируем в логические координаты
+        const logicalPos = CoordUtils.phaserToLogical(adjustedEscapePoint);
+
+        // Устанавливаем waypoint
+        this.setManeuverWaypoint(
+            ship,
+            logicalPos.x,
+            logicalPos.y,
+            Constants.WP_TYPE_MANEUVER,
+            true,
+            true
+        );
+
+        // Увеличиваем скорость для уклонения
+        ship.setPower(Vehicle.POWER_3);  // Уменьшено для теста
+
+        // Логируем действие
+        const distance = Phaser.Math.Distance.Between(shipPos.x, shipPos.y, this.lastKnownThreatPosition.x, this.lastKnownThreatPosition.y);
+        AILogger.log(ship, this.name, "Evading Threat", `Evading from Vehicle ${this.threatId} at distance ${distance.toFixed(0)}m with offset ${randomOffset}°`, LogLevel.INFO, { ...context, evadeDistance: distance, offset: randomOffset });
+    }
 }
 

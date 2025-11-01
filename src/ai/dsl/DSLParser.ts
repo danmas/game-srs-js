@@ -11,6 +11,7 @@ import { AILogger } from '../../utils/AILogger';
 import { Constants } from '../../utils/Constants';
 import { CoordUtils } from '../../utils/CoordUtils';
 import { DetectionState } from '../../utils/DetectionState';
+import { LogLevel } from '../../utils/UniversalLogger';
 
 export interface DSLContext extends AIWorldContext {
   [key: string]: any;
@@ -184,6 +185,9 @@ class DSLParser {
             true
           );
           owner.setPower(params.power || 6);
+          
+          // Добавляем лог
+          AILogger.log(owner, context.strategyName || 'DSLStrategy', 'EVADE', `Evading from ${threatVar} at distance ${params.distance || 800}`, LogLevel.INFO, { threatId: threat.id });
         }
         break;
       case 'ATTACK':
@@ -198,6 +202,9 @@ class DSLParser {
             context,
             { predictLeadTime: params.predict_lead_time || 10 }
           );
+          
+          // Добавляем лог
+          AILogger.log(owner, context.strategyName || 'DSLStrategy', 'ATTACK', `Attacking ${targetVar} with ${params.torpedo || 'weapon_I'}`, LogLevel.INFO, { targetId: target.id, weapon: params.torpedo });
         }
         break;
       case 'CHASE':
@@ -208,6 +215,9 @@ class DSLParser {
           const ownerPos = owner.getPosition();
           const approachDistance = params.distance || 500;
           const angleOffset = params.angle_offset || 0; // 0 = прямо к цели
+          
+          // Рассчитываем реальное расстояние
+          const realDistance = Phaser.Math.Distance.BetweenPoints(ownerPos, targetPos);
           
           const approachInfo = this.baseStrategy.calculateApproach(ownerPos, targetPos, approachDistance, angleOffset);
           const approachLogicalPos = CoordUtils.phaserToLogical(approachInfo.point);
@@ -227,6 +237,9 @@ class DSLParser {
           if (params.depth !== undefined && 'setDepth' in owner) {
             (owner as any).setDepth(params.depth);
           }
+          
+          // Добавляем лог
+          AILogger.log(owner, context.strategyName || 'DSLStrategy', 'CHASE', `Chasing ${chaseTargetVar} at distance ${realDistance.toFixed(0)}m with offset ${angleOffset}°`, LogLevel.INFO, { targetId: chaseTarget.id, distance: realDistance, offset: angleOffset });
         }
         break;
       case 'PATROL':
@@ -236,15 +249,24 @@ class DSLParser {
           console.warn('PATROL route not implemented yet');
         }
         owner.setPower(params.power || 3);
+        
+        // Добавляем лог
+        AILogger.log(owner, context.strategyName || 'DSLStrategy', 'PATROL', `Patrolling at power ${params.power || 3}`, LogLevel.INFO);
         break;
       case 'DIVE':
         if ('setDepth' in owner) { // Проверяем, что это подлодка
             (owner as any).setDepth(params.to_depth);
+            
+            // Добавляем лог
+            AILogger.log(owner, context.strategyName || 'DSLStrategy', 'DIVE', `Diving to depth ${params.to_depth}`, LogLevel.INFO);
         }
         break;
       case 'HOLD_POSITION':
         owner.stopMoveOnWayPoint();
         owner.setPower(0);
+        
+        // Добавляем лог
+        AILogger.log(owner, context.strategyName || 'DSLStrategy', 'HOLD_POSITION', `Holding position`, LogLevel.INFO);
         break;
       default:
         console.warn(`Unknown Action: ${actionType}`);
