@@ -214,9 +214,10 @@ export abstract class BaseAIStrategy implements AIStrategy {
         return bestTargetId;
     }
     
-    /**
+    /** 
      * Расчет угла до цели с учетом игровой координатной системы
-     */
+     * РАБОТАЛО!
+     * 
     protected calculateAngleToTarget(
         from: Vehicle,
         targetPos: Phaser.Math.Vector2
@@ -234,7 +235,71 @@ export abstract class BaseAIStrategy implements AIStrategy {
         
         return { angleRad, angleDeg, diff };
     }
+*/
     
+/**
+ * Расчет угла до цели
+ * Назначение: Вычисляет угол до целевой позиции с учетом игровой координатной системы.
+ *
+ * Сигнатура:
+ * protected calculateAngleToTarget(
+ *     from: Vehicle,
+ *     targetPos: Phaser.Math.Vector2
+ * ): { angleRad: number; angleDeg: number; diff: number }
+ *
+ * Пример использования:
+ * const targetPos = new Phaser.Math.Vector2(enemy.x, enemy.y);
+ * const angleInfo = this.calculateAngleToTarget(ship, targetPos);
+ *
+ * console.log(`Угол до цели: ${angleInfo.angleDeg}°`);
+ * console.log(`Разница с текущим курсом: ${angleInfo.diff}°`);
+ *
+ * // Корректировка руля
+ * if (Math.abs(angleInfo.diff) > 10) {
+ *     ship.setRudder(angleInfo.diff > 0 ? 1 : -1);
+ * }
+ *
+ * Возвращает:
+ * - `angleRad` - угол в радианах (навигационная система)
+ * - `angleDeg` - угол в градусах (навигационная система)
+ * - `diff` - разница между текущим направлением и целевым (кратчайший угол, -180..+180°)
+ */
+protected calculateAngleToTarget(
+    from: Vehicle,
+    targetPos: Phaser.Math.Vector2
+): { angleRad: number; angleDeg: number; diff: number } {
+    // Шаг 1: Вычисляем математический угол (Phaser: 0° = вправо)
+    const mathRad = Phaser.Math.Angle.Between(
+        from.x, from.y,
+        targetPos.x, targetPos.y
+    );
+    const mathDeg = Phaser.Math.RadToDeg(mathRad);
+
+    // Шаг 2: Конвертируем в навигационную систему (0° = вверх)
+    // Формула из COORDINATES_REFERENCE.md: navDeg = (mathDeg + 90 + 360) % 360
+    const angleDeg = (mathDeg + 90 + 360) % 360;
+    const angleRad = Phaser.Math.DegToRad(angleDeg);
+
+    // Шаг 3: Текущее направление уже в навигационных градусах
+    const currentNavDeg = from.getDirection();
+
+    // Шаг 4: Кратчайшая разница углов (навигационная система)
+    const diff = Phaser.Math.Angle.ShortestBetween(currentNavDeg, angleDeg);
+
+    // DEBUG лог (опционально, для отладки)
+    UniversalLogger.debug(
+        `Angle to target: math(${mathDeg.toFixed(1)}° → nav(${angleDeg.toFixed(1)}°), current(${currentNavDeg.toFixed(1)}°), diff(${diff.toFixed(1)}°))`,
+        'AI_CALC_ANGLE'
+    );
+
+    return {
+        angleRad,  // Навигационный rad
+        angleDeg,  // Навигационный deg
+        diff       // Кратчайшая разница
+    };
+}
+
+
     /**
      * Вычисляет направление убегания от угрозы (противоположное направление)
      */

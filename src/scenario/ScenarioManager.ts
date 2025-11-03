@@ -1,6 +1,7 @@
 import { MainScene } from '../scenes/MainScene';
 import { Scenario } from './Scenario';
 import { Scenario1 } from './Scenario1';
+import { Scenario_test_1 } from './Scenario_test_1';
 
 /**
  * Класс для управления сценариями игры
@@ -42,6 +43,11 @@ export class ScenarioManager {
       case 'scenario1':
         console.log('Создаем Scenario1');
         this.currentScenario = new Scenario1(this.scene);
+        break;
+        
+      case 'scenario_test_1':
+        console.log('Создаем Scenario_test_1');
+        this.currentScenario = new Scenario_test_1(this.scene);
         break;
         
       // В будущем можно добавить другие сценарии:

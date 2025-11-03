@@ -80,7 +80,7 @@ export class Scenario1 extends Scenario {
     AIStrategyFactory.assignStrategy('merchant_ship', ship, this.scene);
     console.log(`Scenario1: стратегия 'merchant_ship' назначена кораблю Kashin (ID: ${ship.id})`);
     
-    // Создаем белую подводную лодку-охотник с AI стратегией "Тихий Охотник"
+    // Создаем белую подводную лодку-охотник с AI DSL стратегией "Агрессивный охотник"
     const hunterSubLogicalX = 500;
     const hunterSubLogicalY = -200;
     const hunterSub = this.scene.createEnemyShip(
