@@ -277,14 +277,18 @@ public perceivedTargets: Map<number, PerceivedTargetInfo>;
 
 ### Обзор
 
-Современная система использует паттерн **"Стратегия"** для управления поведением ИИ. Каждый `Vehicle` может иметь назначенную стратегию (`aiStrategy`), которая реализует логику принятия решений.
+Современная система использует паттерн **"Стратегия"** для управления поведением ИИ. Существует два способа определения стратегий:
+
+1.  **DSL (Domain-Specific Language)**: **(Рекомендуемый)** Позволяет описывать сложное поведение в простом `YAML` формате. Идеально для быстрой разработки и тестирования тактик. Подробности в **`README_LLM_ANALYSIS.md`**.
+2.  **TypeScript**: Позволяет создавать стратегии в виде классов TypeScript для максимальной гибкости.
+
+Каждый `Vehicle` может иметь назначенную стратегию (`aiStrategy`), которая реализует логику принятия решений.
 
 **Файлы:**
+- `src/ai/dsl/` - Компоненты для работы с DSL.
 - `src/ai/strategies/AIStrategy.ts` - интерфейс стратегии
-- `src/ai/strategies/BaseAIStrategy.ts` - базовый класс
-- `src/ai/strategies/AIStrategyFactory.ts` - фабрика стратегий
-- `src/ai/strategies/DefaultShipStrategy.ts` - стандартная стратегия корабля
-- `src/ai/strategies/AggressiveShipStrategy.ts` - агрессивная стратегия
+- `src/ai/strategies/BaseAIStrategy.ts` - базовый класс для TS-стратегий
+- `src/ai/strategies/AIStrategyFactory.ts` - фабрика для создания всех типов стратегий
 
 ### Интеграция с Двухфазным Циклом
 
@@ -335,8 +339,9 @@ AIStrategyFactory.assignStrategy('aggressive_ship', ship, scene);
 - `default_ship` - стандартная боевая стратегия
 - `aggressive_ship` - агрессивное преследование
 - `homing_torpedo` - стратегия самонаводящейся торпеды
+- **DSL-стратегии**: Любые стратегии, загруженные из YAML-файлов (например, "Агрессивный охотник").
 
-**Подробнее:** См. полную документацию в `README_AI_STRATEGIES.md`.
+**Подробнее:** См. полную документацию в `README_AI_STRATEGIES.md` (для TS) и `README_LLM_ANALYSIS.md` (для DSL).
 
 ---
 
