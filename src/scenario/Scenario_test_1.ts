@@ -63,9 +63,39 @@ export class Scenario_test_1 extends Scenario {
       (ship as any).setHealth(1000);
     }
     
-    // Назначаем стратегию торгового корабля кораблю "Kashin"
-    AIStrategyFactory.assignStrategy('merchant_ship', ship, this.scene);
-    console.log(`Scenario_test_1: стратегия 'merchant_ship' назначена кораблю Kashin (ID: ${ship.id})`);
+// // Назначаем стратегию торгового корабля кораблю "Kashin"
+// AIStrategyFactory.assignStrategy('merchant_ship', ship, this.scene);
+// console.log(`Scenario_test_1: стратегия 'merchant_ship' назначена кораблю Kashin (ID: ${ship.id})`);
+
+    // Назначаем DSL стратегию "Торговый корабль" кораблю "Kashin"
+    const merchantShipDSL = `
+strategy: "Торговый корабль"
+description: "Движется по курсу, уклоняясь от торпед."
+
+ON ANALYZE:
+  - FIND:
+      nearest_torpedo:
+        type: torpedo
+        range: 1500
+        detection_zone: 1
+
+ON ACTION:
+  IF:
+    condition: nearest_torpedo IS_PRESENT
+    actions:
+      - Action:
+          EVADE:
+            from: nearest_torpedo
+            distance: 1000
+            power: 6
+  ELSE:
+    actions:
+      - Action:
+          PATROL:
+            power: 3
+`;
+    AIStrategyFactory.assignStrategyFromDSL(merchantShipDSL, ship, this.scene);
+    console.log(`Scenario_test_1: DSL стратегия 'Торговый корабль' назначена кораблю Kashin (ID: ${ship.id})`);
     
     // Создаем белую подводную лодку-охотник с AI DSL стратегией "Агрессивный охотник"
     const hunterSubLogicalX = 500;
