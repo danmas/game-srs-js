@@ -89,26 +89,26 @@ ON ANALYZE:
   - FIND:
       best_target:
         type: ship
-        range: 1500
-        detection_zone: 2
+        range: 2000
+        detection_zone: 1
 
 ON ACTION:
   IF:
-    condition: best_target IS_PRESENT AND weapon_I IS_READY
+    condition: best_target IS_PRESENT AND weapon_I IS_READY AND distance_to(best_target) < 800
     actions:
       - Action:
           ATTACK:
             with: best_target
             torpedo: weapon_I
-            predict_lead_time: 0
+            predict_lead_time: 5
   ELSE IF:
     condition: best_target IS_PRESENT
     actions:
       - Action:
           CHASE:
             target: best_target
-            distance: 500
-            power: 6  // Увеличено для теста
+            distance: 400
+            power: 6
             angle_offset: 0
             depth: 100
   ELSE:
@@ -128,6 +128,21 @@ ON ACTION:
     this.initAfter();
     
     console.log('Scenario_test_1: init завершен');
+  }
+  
+  /**
+   * Проверяет условия окончания игры
+   * В тестовом сценарии нет лодки игрока, поэтому проверяем только наличие кораблей
+   */
+  public override checkGameOver(): number {
+    // В тестовом сценарии игра продолжается, пока есть корабли
+    // Можно считать успехом, если все красные корабли уничтожены (Kashin)
+    if (this.scene.getRedShips().length === 0) {
+      return Scenario.MISSION_SUCCESS;
+    }
+    
+    // В остальных случаях - игра продолжается
+    return Scenario.GAME_CONTINUE;
   }
   
   /**

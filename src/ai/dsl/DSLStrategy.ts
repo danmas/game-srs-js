@@ -5,6 +5,8 @@ import { Vehicle } from '../../objects/Vehicle';
 import { AIStrategy, AIWorldContext } from '../strategies/AIStrategy';
 import { DSLParser, DSLContext } from './DSLParser';
 import { MainScene } from '../../scenes/MainScene';
+import { AILogger } from '../../utils/AILogger';
+import { LogLevel } from '../../utils/UniversalLogger';
 
 // Создание DSLStrategy.ts (Класс-обертка)
 // Этот класс будет "мостом" между движком игры и парсером.
@@ -47,15 +49,19 @@ export class DSLStrategy implements AIStrategy {
 
   // analyzeStep и actionStep теперь правильно разделены
   public analyzeStep(owner: Vehicle, context: AIWorldContext): void {
+    AILogger.log(owner, this.name, "DSL Analyze", "Start", LogLevel.DEBUG, { targetCount: owner.perceivedTargets.size });
     this.updateContext(owner, context);
     // Выполняем блок ANALYZE из DSL
     this.analyzeFunction(owner, this.dslContext);
+    AILogger.log(owner, this.name, "DSL Analyze", "End", LogLevel.DEBUG, { best_target: this.dslContext['best_target'] ? this.dslContext['best_target'].id : 'null' });
   }
 
   public actionStep(owner: Vehicle, context: AIWorldContext): void {
+    AILogger.log(owner, this.name, "DSL Action", "Start", LogLevel.DEBUG, { best_target: this.dslContext['best_target'] ? this.dslContext['best_target'].id : 'null' });
     this.updateContext(owner, context);
     // Выполняем блок ACTION из DSL
     this.actionFunction(owner, this.dslContext);
+    AILogger.log(owner, this.name, "DSL Action", "End", LogLevel.DEBUG);
   }
 
   private updateContext(owner: Vehicle, context: AIWorldContext): void {

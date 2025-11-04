@@ -134,16 +134,35 @@ class DSLParser {
 
   private executeIfBlock(block: any, owner: Vehicle, context: DSLContext): void {
     if (block.IF) {
-      const condition = this.evalCondition(block.IF.condition, context, owner);
-      if (condition) {
-        this.executeActions(block.IF.actions, owner, context);
-        return;
+      const condition = block.IF.condition;
+      const actions = block.IF.actions;
+      const result = this.evalCondition(condition, context, owner);
+      AILogger.log(owner, context.strategyName || 'DSLStrategy', 'Eval IF', `Condition: "${condition}" -> ${result}`, LogLevel.DEBUG);
+      if (result) {
+        this.executeActions(actions, owner, context);
+        return; // Exit after first true block
       }
     }
+
     if (block['ELSE IF']) {
-      this.executeIfBlock(block['ELSE IF'], owner, context);
-    } else if (block.ELSE) {
-      this.executeActions(block.ELSE.actions, owner, context);
+      // It can be a single object or an array of them
+      const elseIfs = Array.isArray(block['ELSE IF']) ? block['ELSE IF'] : [block['ELSE IF']];
+      for (const elseIf of elseIfs) {
+        const condition = elseIf.condition;
+        const actions = elseIf.actions;
+        const result = this.evalCondition(condition, context, owner);
+        AILogger.log(owner, context.strategyName || 'DSLStrategy', 'Eval ELSE IF', `Condition: "${condition}" -> ${result}`, LogLevel.DEBUG);
+        if (result) {
+          this.executeActions(actions, owner, context);
+          return; // Exit after first true block
+        }
+      }
+    }
+
+    if (block.ELSE) {
+      AILogger.log(owner, context.strategyName || 'DSLStrategy', 'Exec ELSE', 'Executing ELSE block', LogLevel.DEBUG);
+      const actions = block.ELSE.actions;
+      this.executeActions(actions, owner, context);
     }
   }
 

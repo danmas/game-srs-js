@@ -4,7 +4,6 @@ import { Torpedo } from '../../objects/Torpedo';
 import { MainScene } from '../../scenes/MainScene';
 import { AIStrategy } from './AIStrategy';
 import { AILogger } from '../../utils/AILogger';
-import { DSLStrategy } from '../dsl/DSLStrategy';
 
 /**
  * Фабрика для создания и управления стратегиями ИИ.
