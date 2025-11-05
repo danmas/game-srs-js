@@ -4,6 +4,7 @@ import { Torpedo } from '../../objects/Torpedo';
 import { MainScene } from '../../scenes/MainScene';
 import { AIStrategy } from './AIStrategy';
 import { AILogger } from '../../utils/AILogger';
+import { UniversalLogger } from '../../utils/UniversalLogger';
 
 /**
  * Фабрика для создания и управления стратегиями ИИ.
@@ -13,6 +14,22 @@ export class AIStrategyFactory {
     private static strategies: Map<string, new () => AIStrategy> = new Map();
     // Флаг инициализации стандартных стратегий
     private static initialized: boolean = false;
+    // Загрузчик DSL стратегий (ленивая загрузка модуля)
+    private static _dslLoader: any | null = null;
+    
+    /**
+     * Ленивый геттер для загрузчика DSL стратегий
+     * Использует require для избежания циклических зависимостей
+     */
+    private static get dslLoader(): any {
+        if (!AIStrategyFactory._dslLoader) {
+            // Ленивая загрузка модуля для избежания циклических зависимостей
+            const module = (require as any)('../dsl/DSLStrategyLoader');
+            const DSLStrategyLoaderClass = module.DSLStrategyLoader;
+            AIStrategyFactory._dslLoader = DSLStrategyLoaderClass.getInstance();
+        }
+        return AIStrategyFactory._dslLoader;
+    }
     
     // Кэш для ленивой загрузки классов стратегий
     private static _DefaultShipStrategy: (new () => AIStrategy) | null = null;
@@ -95,14 +112,27 @@ export class AIStrategyFactory {
     /**
      * Создает стратегию по идентификатору
      * @param id Идентификатор стратегии
+     * @param scene Игровая сцена (требуется для DSL стратегий)
      * @returns Экземпляр стратегии или null, если стратегия не найдена
      */
-    public static createStrategy(id: string): AIStrategy | null {
+    public static createStrategy(id: string, scene?: MainScene): AIStrategy | null {
         AIStrategyFactory.ensureInitialized();
-        const strategyClass = AIStrategyFactory.strategies.get(id);
-        if (!strategyClass) return null;
         
-        return new strategyClass();
+        // Сначала проверяем стандартные TypeScript стратегии
+        const strategyClass = AIStrategyFactory.strategies.get(id);
+        if (strategyClass) {
+            return new strategyClass();
+        }
+        
+        // Если не найдено, пробуем загрузить DSL стратегию из файла
+        if (scene) {
+            const dslStrategy = AIStrategyFactory.dslLoader.createStrategy(id, scene);
+            if (dslStrategy) {
+                return dslStrategy;
+            }
+        }
+        
+        return null;
     }
     
     /**
@@ -113,7 +143,7 @@ export class AIStrategyFactory {
      * @returns true, если стратегия успешно назначена
      */
     public static assignStrategy(id: string, vehicle: Vehicle, scene: MainScene): boolean {
-        const strategy = AIStrategyFactory.createStrategy(id);
+        const strategy = AIStrategyFactory.createStrategy(id, scene);
         if (!strategy) return false;
         
         strategy.initialize(vehicle, scene);
@@ -157,7 +187,61 @@ export class AIStrategyFactory {
      */
     public static getAvailableStrategies(): string[] {
         AIStrategyFactory.ensureInitialized();
-        return Array.from(AIStrategyFactory.strategies.keys());
+        const tsStrategies = Array.from(AIStrategyFactory.strategies.keys());
+        const dslStrategies = AIStrategyFactory.dslLoader.getLoadedStrategies();
+        return [...tsStrategies, ...dslStrategies];
+    }
+    
+    /**
+     * Загружает DSL стратегию из файла по имени
+     * @param strategyName Имя стратегии (имя файла без .yaml)
+     * @returns Promise, который разрешается при успешной загрузке
+     */
+    public static async loadDSLStrategy(strategyName: string): Promise<boolean> {
+        const yamlContent = await AIStrategyFactory.dslLoader.loadStrategy(strategyName);
+        return yamlContent !== null;
+    }
+    
+    /**
+     * Загружает несколько DSL стратегий из файлов
+     * @param strategyNames Массив имен стратегий
+     * @returns Promise, который разрешается при успешной загрузке всех стратегий
+     */
+    public static async loadDSLStrategies(strategyNames: string[]): Promise<void> {
+        await AIStrategyFactory.dslLoader.loadAllStrategies(strategyNames);
+    }
+    
+    /**
+     * Назначает DSL стратегию объекту по имени файла
+     * @param strategyName Имя стратегии (имя файла без .yaml)
+     * @param vehicle Объект, которому назначается стратегия
+     * @param scene Игровая сцена
+     * @returns Promise, который разрешается true при успешном назначении
+     */
+    public static async assignDSLStrategy(strategyName: string, vehicle: Vehicle, scene: MainScene): Promise<boolean> {
+        // Проверяем, загружена ли стратегия
+        if (!AIStrategyFactory.dslLoader.isStrategyLoaded(strategyName)) {
+            // Пытаемся загрузить
+            const loaded = await AIStrategyFactory.loadDSLStrategy(strategyName);
+            if (!loaded) {
+                UniversalLogger.warn(`Не удалось загрузить DSL стратегию '${strategyName}'`, 'AI_STRATEGY_FACTORY');
+                return false;
+            }
+        }
+        
+        // Создаем и назначаем стратегию
+        const strategy = AIStrategyFactory.dslLoader.createStrategy(strategyName, scene);
+        if (!strategy) {
+            UniversalLogger.warn(`Не удалось создать DSL стратегию '${strategyName}'`, 'AI_STRATEGY_FACTORY');
+            return false;
+        }
+        
+        strategy.initialize(vehicle, scene);
+        vehicle.aiStrategy = strategy;
+        AILogger.changeLogContext(vehicle, strategy.name);
+        
+        UniversalLogger.info(`DSL стратегия '${strategyName}' назначена объекту ${vehicle.id}`, 'AI_STRATEGY_FACTORY');
+        return true;
     }
     
     /**

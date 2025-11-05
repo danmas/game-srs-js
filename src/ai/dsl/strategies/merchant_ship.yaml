@@ -1,0 +1,25 @@
+strategy: "Торговый корабль"
+description: "Движется по курсу, уклоняясь от торпед."
+
+ON ANALYZE:
+  - FIND:
+      nearest_torpedo:
+        type: torpedo
+        range: 1500
+        detection_zone: 1
+
+ON ACTION:
+  IF:
+    condition: nearest_torpedo IS_PRESENT
+    actions:
+      - Action:
+          EVADE:
+            from: nearest_torpedo
+            distance: 1000
+            power: 6
+  ELSE:
+    actions:
+      - Action:
+          PATROL:
+            power: 3
+

@@ -26,6 +26,19 @@ export class Scenario_test_1 extends Scenario {
   }
   
   /**
+   * Предзагрузка DSL стратегий перед инициализацией
+   * Можно вызвать асинхронно перед init() для синхронного использования стратегий
+   */
+  public async preloadStrategies(): Promise<void> {
+    console.log('Scenario_test_1: предзагрузка DSL стратегий');
+    await AIStrategyFactory.loadDSLStrategies([
+      'merchant_ship',
+      'aggressive_hunter'
+    ]);
+    console.log('Scenario_test_1: DSL стратегии загружены');
+  }
+
+  /**
    * Инициализация сценария
    */
   public override init(): void {
@@ -67,35 +80,21 @@ export class Scenario_test_1 extends Scenario {
 // AIStrategyFactory.assignStrategy('merchant_ship', ship, this.scene);
 // console.log(`Scenario_test_1: стратегия 'merchant_ship' назначена кораблю Kashin (ID: ${ship.id})`);
 
-    // Назначаем DSL стратегию "Торговый корабль" кораблю "Kashin"
-    const merchantShipDSL = `
-strategy: "Торговый корабль"
-description: "Движется по курсу, уклоняясь от торпед."
-
-ON ANALYZE:
-  - FIND:
-      nearest_torpedo:
-        type: torpedo
-        range: 1500
-        detection_zone: 1
-
-ON ACTION:
-  IF:
-    condition: nearest_torpedo IS_PRESENT
-    actions:
-      - Action:
-          EVADE:
-            from: nearest_torpedo
-            distance: 1000
-            power: 6
-  ELSE:
-    actions:
-      - Action:
-          PATROL:
-            power: 3
-`;
-    AIStrategyFactory.assignStrategyFromDSL(merchantShipDSL, ship, this.scene);
-    console.log(`Scenario_test_1: DSL стратегия 'Торговый корабль' назначена кораблю Kashin (ID: ${ship.id})`);
+    // Назначаем DSL стратегию "Торговый корабль" кораблю "Kashin" из файла
+    // Стратегия загружается из файла src/ai/dsl/strategies/merchant_ship.yaml
+    // Если стратегия уже загружена через preloadStrategies(), используем синхронный метод
+    if (AIStrategyFactory.assignStrategy('merchant_ship', ship, this.scene)) {
+      console.log(`Scenario_test_1: DSL стратегия 'merchant_ship' назначена кораблю Kashin (ID: ${ship.id})`);
+    } else {
+      // Если не загружена, загружаем асинхронно
+      AIStrategyFactory.assignDSLStrategy('merchant_ship', ship, this.scene).then(success => {
+        if (success) {
+          console.log(`Scenario_test_1: DSL стратегия 'merchant_ship' назначена кораблю Kashin (ID: ${ship.id})`);
+        } else {
+          console.warn(`Scenario_test_1: Не удалось назначить DSL стратегию 'merchant_ship' кораблю Kashin`);
+        }
+      });
+    }
     
     // Создаем белую подводную лодку-охотник с AI DSL стратегией "Агрессивный охотник"
     const hunterSubLogicalX = 500;
@@ -110,45 +109,21 @@ ON ACTION:
     hunterSub.setPower(Vehicle.POWER_2);
     hunterSub.setName("Hunter");
     
-    // Назначаем DSL стратегию "Агрессивный охотник" подводной лодке
-    const aggressiveHunterDSL = `
-strategy: "Агрессивный охотник"
-description: "Атакует ближайшие цели"
-
-ON ANALYZE:
-  - FIND:
-      best_target:
-        type: ship
-        range: 2000
-        detection_zone: 1
-
-ON ACTION:
-  IF:
-    condition: best_target IS_PRESENT AND weapon_I IS_READY AND distance_to(best_target) < 800
-    actions:
-      - Action:
-          ATTACK:
-            with: best_target
-            torpedo: weapon_I
-            predict_lead_time: 5
-  ELSE IF:
-    condition: best_target IS_PRESENT
-    actions:
-      - Action:
-          CHASE:
-            target: best_target
-            distance: 400
-            power: 6
-            angle_offset: 0
-            depth: 100
-  ELSE:
-    actions:
-      - Action:
-          PATROL:
-            power: 3
-`;
-    AIStrategyFactory.assignStrategyFromDSL(aggressiveHunterDSL, hunterSub, this.scene);
-    console.log(`Scenario_test_1: DSL стратегия 'Агрессивный охотник' назначена подводной лодке Hunter (ID: ${hunterSub.id})`);
+    // Назначаем DSL стратегию "Агрессивный охотник" подводной лодке из файла
+    // Стратегия загружается из файла src/ai/dsl/strategies/aggressive_hunter.yaml
+    // Если стратегия уже загружена через preloadStrategies(), используем синхронный метод
+    if (AIStrategyFactory.assignStrategy('aggressive_hunter', hunterSub, this.scene)) {
+      console.log(`Scenario_test_1: DSL стратегия 'aggressive_hunter' назначена подводной лодке Hunter (ID: ${hunterSub.id})`);
+    } else {
+      // Если не загружена, загружаем асинхронно
+      AIStrategyFactory.assignDSLStrategy('aggressive_hunter', hunterSub, this.scene).then(success => {
+        if (success) {
+          console.log(`Scenario_test_1: DSL стратегия 'aggressive_hunter' назначена подводной лодке Hunter (ID: ${hunterSub.id})`);
+        } else {
+          console.warn(`Scenario_test_1: Не удалось назначить DSL стратегию 'aggressive_hunter' подводной лодке Hunter`);
+        }
+      });
+    }
     
     console.log('Scenario_test_1: создание кораблей завершено');
     

@@ -42,7 +42,8 @@ module.exports = {
     }),
     new CopyWebpackPlugin({
       patterns: [
-        { from: 'src/assets', to: 'assets' }
+        { from: 'src/assets', to: 'assets' },
+        { from: 'src/ai/dsl/strategies', to: 'ai/dsl/strategies' }
       ]
     }),
     new webpack.DefinePlugin({

@@ -115,32 +115,129 @@ AIStrategyFactory.assignStrategy('aggressive_ship', ship, scene);
 1.  Создайте строку с YAML-кодом, описывающим логику.
 2.  Передайте эту строку в `AIStrategyFactory.assignStrategyFromDSL()`.
 
-### Создание новой TS-стратегии
+Изучаю код, чтобы определить, какие функции из `BaseAIStrategy` используются в DSL стратегиях, и как организовать хранение и загрузку DSL стратегий.
 
-1. Создайте новый класс, наследующий `BaseAIStrategy`:
 
-```typescript
-import { BaseAIStrategy } from './BaseAIStrategy';
+[4 tools called]
 
-export class MyNewStrategy extends BaseAIStrategy {
-    public readonly name: string = "Моя Новая Стратегия";
-    public readonly description: string = "Описание стратегии";
-    
-    public analyzeStep(owner: Vehicle, context: AIWorldContext): void {
-        // Ваш код анализа
-    }
-    
-    public actionStep(owner: Vehicle, context: AIWorldContext): void {
-        // Ваш код действий
-    }
+
+Изучаю структуру проекта для размещения DSL-файлов и механизма загрузки:
+
+
+[5 tools called]
+
+
+Проверяю структуру проекта и готовлю ответ. Изучаю `AIStrategyFactory` для интеграции загрузки:
+
+
+[2 tools called]
+
+
+## 1. Функции из BaseAIStrategy, используемые в DSL стратегиях
+
+Из анализа `DSLParser.ts` и `DSLHelperStrategy`, DSL стратегии используют следующие методы из `BaseAIStrategy`:
+
+### Используемые методы:
+
+1. **`findTargetByFilter()`** (через обертку `findTarget()`)
+   - Используется в блоке `FIND` фазы `ON ANALYZE`
+   - Поиск целей по критериям (тип, дистанция, зона обнаружения)
+
+2. **`calculateEscapeDirection()`** (через обертку `calculateEscape()`)
+   - Используется в действии `EVADE`
+   - Вычисляет направление и точку убегания от угрозы
+
+3. **`calculateApproachDirection()`** (через обертку `calculateApproach()`)
+   - Используется в действии `CHASE`
+   - Вычисляет направление и точку приближения к цели
+
+4. **`setManeuverWaypoint()`** (через обертку `setManeuver()`)
+   - Используется в `EVADE` и `CHASE`
+   - Устанавливает waypoint для маневра
+
+5. **`fireTorpedoAtTarget()`** (через обертку `fireTorpedo()`)
+   - Используется в действии `ATTACK`
+   - Выполняет выстрел торпедой с проверками (готовность оружия, дистанция, угол)
+
+### Архитектура доступа:
+
+```20:52:src/ai/dsl/DSLParser.ts
+// Простой наследник BaseAIStrategy для доступа к protected методам
+class DSLHelperStrategy extends BaseAIStrategy {
+  public readonly name: string = "DSL Helper";
+  public readonly description: string = "Helper strategy for DSL parser";
+  
+  public analyzeStep(owner: Vehicle, context: AIWorldContext): void {}
+  public actionStep(owner: Vehicle, context: AIWorldContext): void {}
+  
+  // Публичные обертки для protected методов
+  public findTarget(vehicle: Vehicle, context: AIWorldContext, filter: any): number | null {
+    return this.findTargetByFilter(vehicle, context, filter);
+  }
+  
+  public calculateEscape(fromPos: Phaser.Math.Vector2, threatPos: Phaser.Math.Vector2, escapeDistance: number = 800) {
+    return this.calculateEscapeDirection(fromPos, threatPos, escapeDistance);
+  }
+  
+  public calculateApproach(fromPos: Phaser.Math.Vector2, targetPos: Phaser.Math.Vector2, approachDistance: number = 500, angleOffset: number = 0) {
+    return this.calculateApproachDirection(fromPos, targetPos, approachDistance, angleOffset);
+  }
+  
+  public setManeuver(vehicle: Vehicle, x: number, y: number, type: number, autoStart: boolean, clearPrevious: boolean) {
+    return this.setManeuverWaypoint(vehicle, x, y, type, autoStart, clearPrevious);
+  }
+  
+  public fireTorpedo(ship: Ship, target: Vehicle, weaponType: number, context: AIWorldContext, options: any) {
+    return this.fireTorpedoAtTarget(ship, target, weaponType, context, options);
+  }
+  
+  public isInitialized(): boolean {
+    return this.owner !== null;
+  }
 }
 ```
 
-2. Зарегистрируйте стратегию в фабрике:
+Поскольку методы `BaseAIStrategy` объявлены как `protected`, `DSLParser` использует наследника `DSLHelperStrategy` с публичными обертками.
 
-```typescript
-AIStrategyFactory.registerStrategy('my_new_strategy', MyNewStrategy);
+---
+
+## 2. Предложение по организации DSL стратегий в файлах
+
+План реализации:
+
+### Структура:
 ```
+src/
+  ai/
+    dsl/
+      strategies/          # Директория для YAML файлов стратегий
+        merchant_ship.yaml
+        aggressive_hunter.yaml
+        ...
+      DSLStrategyLoader.ts  # Менеджер загрузки стратегий
+      DSLParser.ts
+      DSLStrategy.ts
+```
+
+### Компоненты:
+
+1. **DSLStrategyLoader** — менеджер загрузки:
+   - Загрузка YAML из `strategies/`
+   - Кэширование загруженных стратегий
+   - Методы: `loadStrategy(name)`, `loadAllStrategies()`, `getStrategy(name)`
+
+2. **Обновление webpack.config.js**:
+   - Добавить правило для YAML файлов
+   - Копировать YAML в `dist/`
+
+3. **Интеграция в AIStrategyFactory**:
+   - Автозагрузка при инициализации
+   - Метод `assignStrategy(name, vehicle, scene)` для DSL-стратегий по имени
+
+4. **Примеры YAML файлов**:
+   - `merchant_ship.yaml` — стратегия торгового корабля
+   - `aggressive_hunter.yaml` — стратегия агрессивного охотника
+
 
 ## ⚠️ КРИТИЧЕСКИ ВАЖНО: Система Координат и Углов
 

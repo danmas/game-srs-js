@@ -1,0 +1,35 @@
+strategy: "Агрессивный охотник"
+description: "Атакует ближайшие цели"
+
+ON ANALYZE:
+  - FIND:
+      best_target:
+        type: ship
+        range: 2000
+        detection_zone: 1
+
+ON ACTION:
+  IF:
+    condition: best_target IS_PRESENT AND weapon_I IS_READY AND distance_to(best_target) < 800
+    actions:
+      - Action:
+          ATTACK:
+            with: best_target
+            torpedo: weapon_I
+            predict_lead_time: 5
+  ELSE IF:
+    condition: best_target IS_PRESENT
+    actions:
+      - Action:
+          CHASE:
+            target: best_target
+            distance: 400
+            power: 6
+            angle_offset: 0
+            depth: 100
+  ELSE:
+    actions:
+      - Action:
+          PATROL:
+            power: 3
+
