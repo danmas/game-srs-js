@@ -1,6 +1,7 @@
 import { MainScene } from '../scenes/MainScene';
 import { Scenario } from './Scenario';
 import { Scenario1 } from './Scenario1';
+import { Scenario_2 } from './Scenario_2_P_Kashin';
 import { Scenario_test_1 } from './Scenario_test_1';
 
 /**
@@ -45,7 +46,12 @@ export class ScenarioManager {
         this.currentScenario = new Scenario1(this.scene);
         break;
         
-      case 'scenario_test_1':
+        case 'scenario_2':
+          console.log('Создаем Scenario_2');
+          this.currentScenario = new Scenario_2(this.scene);
+          break;
+          
+        case 'scenario_test_1':
         console.log('Создаем Scenario_test_1');
         this.currentScenario = new Scenario_test_1(this.scene);
         break;

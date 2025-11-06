@@ -316,6 +316,7 @@ export class MainScene extends Phaser.Scene {
     // Загружаем сценарий, но не запускаем игру
     if (this.scenarioManager) {
       this.scenarioManager.loadScenario('scenario_test_1');
+      // this.scenarioManager.loadScenario('scenario_2');
       this.scenarioManager.showMissionGoal();
       
       // Центрируем камеру на позиции игрока и устанавливаем myShip как выбранный для информера

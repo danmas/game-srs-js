@@ -68,6 +68,8 @@ export class DSLStrategyLoader {
 
       const yamlContent = await response.text();
       
+      UniversalLogger.info(`Загружено содержимое YAML для '${strategyName}': длина=${yamlContent.length}, первые 200 символов: "${yamlContent.substring(0, 200)}"`, 'DSL_LOADER');
+      
       // Парсим метаданные из YAML
       const metadata = this.parseMetadata(yamlContent, filename);
       if (metadata) {
