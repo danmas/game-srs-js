@@ -4,6 +4,7 @@ import * as yaml from 'js-yaml';
 import Phaser from 'phaser';
 import { Vehicle } from '../../objects/Vehicle';
 import { Ship } from '../../objects/Ship';
+import { Torpedo } from '../../objects/Torpedo';
 import { AIWorldContext } from '../strategies/AIStrategy';
 import { BaseAIStrategy } from '../strategies/BaseAIStrategy';
 import { MainScene } from '../../scenes/MainScene';
@@ -30,8 +31,8 @@ class DSLHelperStrategy extends BaseAIStrategy {
     return this.findTargetByFilter(vehicle, context, filter);
   }
   
-  public calculateEscape(fromPos: Phaser.Math.Vector2, threatPos: Phaser.Math.Vector2, escapeDistance: number = 800) {
-    return this.calculateEscapeDirection(fromPos, threatPos, escapeDistance);
+  public calculateEscape(fromPos: Phaser.Math.Vector2, threatPos: Phaser.Math.Vector2, escapeDistance: number = 800, threatVehicle?: Vehicle) {
+    return this.calculateEscapeDirection(fromPos, threatPos, escapeDistance, threatVehicle);
   }
   
   public calculateApproach(fromPos: Phaser.Math.Vector2, targetPos: Phaser.Math.Vector2, approachDistance: number = 500, angleOffset: number = 0) {
@@ -96,17 +97,29 @@ class DSLParser {
           
           // Сохраняем информацию о цели
           if (targetId !== null) {
-            const targetVehicle = this.getVehicleById(context.scene, targetId);
-            if (targetVehicle) {
-              const targetInfo = owner.perceivedTargets.get(targetId);
+            // Используем targetVehicle напрямую из perceivedTargets (более надежно)
+            const targetInfo = owner.perceivedTargets.get(targetId);
+            if (targetInfo && targetInfo.targetVehicle) {
+              const targetVehicle = targetInfo.targetVehicle;
               context[targetVar] = {
                 id: targetId,
                 vehicle: targetVehicle,
                 position: targetVehicle.getPosition(),
-                detectionState: targetInfo?.detectionState || DetectionState.NO_CONTACT,
+                detectionState: targetInfo.detectionState,
               };
             } else {
-              context[targetVar] = null;
+              // Fallback: пытаемся найти через getVehicleById
+              const targetVehicle = this.getVehicleById(context.scene, targetId);
+              if (targetVehicle) {
+                context[targetVar] = {
+                  id: targetId,
+                  vehicle: targetVehicle,
+                  position: targetVehicle.getPosition(),
+                  detectionState: DetectionState.NO_CONTACT,
+                };
+              } else {
+                context[targetVar] = null;
+              }
             }
           } else {
             context[targetVar] = null;
@@ -193,7 +206,8 @@ class DSLParser {
         const threat = context[threatVar];
         if (threat && threat.vehicle) {
           const threatPos = threat.position || threat.vehicle.getPosition();
-          const escapePoint = this.baseStrategy.calculateEscape(owner.getPosition(), threatPos, params.distance || 800);
+          // Передаем объект угрозы для определения типа и курса (для торпед)
+          const escapePoint = this.baseStrategy.calculateEscape(owner.getPosition(), threatPos, params.distance || 800, threat.vehicle);
           const escapeLogicalPos = CoordUtils.phaserToLogical(escapePoint.point);
           this.baseStrategy.setManeuver(
             owner,
@@ -205,8 +219,19 @@ class DSLParser {
           );
           owner.setPower(params.power || 6);
           
-          // Добавляем лог
-          AILogger.log(owner, context.strategyName || 'DSLStrategy', 'EVADE', `Evading from ${threatVar} at distance ${params.distance || 800}`, LogLevel.INFO, { threatId: threat.id });
+          // Добавляем лог с информацией о типе угрозы
+          const threatType = threat.vehicle instanceof Torpedo ? 'Torpedo' : threat.vehicle.entityType;
+          const threatDirection = threat.vehicle instanceof Torpedo ? threat.vehicle.getDirection().toFixed(1) : 'N/A';
+          AILogger.log(owner, context.strategyName || 'DSLStrategy', 'EVADE', 
+            `Evading from ${threatType} ${threatVar} (ID: ${threat.id}) at distance ${params.distance || 800}. ` +
+            (threat.vehicle instanceof Torpedo ? `Torpedo direction: ${threatDirection}°, Evasion angle: ${escapePoint.angleDeg.toFixed(1)}°` : ''),
+            LogLevel.INFO, 
+            { 
+              threatId: threat.id, 
+              threatType: threatType,
+              threatDirection: threat.vehicle instanceof Torpedo ? threat.vehicle.getDirection() : undefined,
+              evasionAngle: escapePoint.angleDeg
+            });
         }
         break;
       case 'ATTACK':

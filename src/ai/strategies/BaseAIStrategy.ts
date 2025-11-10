@@ -23,6 +23,10 @@ export abstract class BaseAIStrategy implements AIStrategy {
     protected owner: Vehicle | null = null;
     protected scene: MainScene | null = null;
     
+    // Карта для хранения выбранного направления уклонения для каждой торпеды
+    // Ключ: ID торпеды, Значение: 1 для +90°, -1 для -90°
+    private torpedoEvasionDirections: Map<number, number> = new Map();
+    
     /**
      * Инициализация стратегии
      */
@@ -44,6 +48,14 @@ export abstract class BaseAIStrategy implements AIStrategy {
      */
     public analyzeStep(owner: Vehicle, context: AIWorldContext): void {
         this.logDecision("Analyze Step", "Evaluating situation.");
+        
+        // Периодическая очистка карты направлений уклонения (каждые 10 секунд)
+        const cleanupInterval = 10000; // 10 секунд
+        const lastCleanupTime = (owner as any).__lastEvasionCleanupTime || 0;
+        if (context.gameTime - lastCleanupTime > cleanupInterval) {
+            (owner as any).__lastEvasionCleanupTime = context.gameTime;
+            this.cleanupTorpedoEvasionDirections();
+        }
     }
     
     /**
@@ -158,7 +170,7 @@ export abstract class BaseAIStrategy implements AIStrategy {
         context: AIWorldContext,
         filter: {
             requireDetectionLevel?: DetectionState;
-            requireType?: 'Ship' | 'Submarine' | 'any';
+            requireType?: 'Ship' | 'Submarine' | 'Torpedo' | 'torpedo' | 'any';
             maxDistance?: number;
             minDistance?: number;
             excludeConvoy?: boolean;
@@ -183,6 +195,8 @@ export abstract class BaseAIStrategy implements AIStrategy {
             // Проверка типа
             if (requireType === 'Ship' && !(perceivedInfo.targetVehicle instanceof Ship)) continue;
             if (requireType === 'Submarine' && !(perceivedInfo.targetVehicle instanceof Submarine)) continue;
+            // Проверка для торпед (поддерживаем оба варианта: 'Torpedo' и 'torpedo')
+            if ((requireType === 'Torpedo' || requireType === 'torpedo') && !(perceivedInfo.targetVehicle instanceof Torpedo)) continue;
             
             // Проверка конвоя
             if (filter.excludeConvoy && perceivedInfo.targetVehicle instanceof Ship) {
@@ -301,30 +315,79 @@ protected calculateAngleToTarget(
 
 
     /**
-     * Вычисляет направление убегания от угрозы (противоположное направление)
+     * Вычисляет направление убегания от угрозы
+     * Для торпед: перпендикулярно курсу торпеды (±90°), выбор сохраняется для каждой торпеды
+     * Для других угроз: противоположное направление (180°)
      */
     protected calculateEscapeDirection(
         fromPos: Phaser.Math.Vector2,
         threatPos: Phaser.Math.Vector2,
-        escapeDistance: number = 800
+        escapeDistance: number = 800,
+        threatVehicle?: Vehicle
     ): { angle: number; point: Phaser.Math.Vector2; angleDeg: number } {
-        const angleToThreat = Phaser.Math.Angle.Between(
-            fromPos.x, fromPos.y,
-            threatPos.x, threatPos.y
-        );
+        let escapeAngleRad: number;
+        let escapeAngleDeg: number;
         
-        // Убегаем в противоположном направлении (+ 180°)
-        const escapeAngleRad = angleToThreat + Math.PI;
-        const escapeAngleDeg = (Phaser.Math.RadToDeg(escapeAngleRad) + 360) % 360;
+        // Если это торпеда - уклоняемся перпендикулярно её курсу
+        if (threatVehicle instanceof Torpedo) {
+            const torpedoId = threatVehicle.id;
+            const torpedoDirectionRad = Phaser.Math.DegToRad(threatVehicle.getDirection());
+            
+            // Проверяем, есть ли уже сохраненное направление для этой торпеды
+            let evasionSide = this.torpedoEvasionDirections.get(torpedoId);
+            
+            // Если нет - выбираем случайно +90° или -90° и сохраняем
+            if (evasionSide === undefined) {
+                evasionSide = Phaser.Math.Between(0, 1) === 0 ? -1 : 1; // -1 для -90°, 1 для +90°
+                this.torpedoEvasionDirections.set(torpedoId, evasionSide);
+            }
+            
+            // Вычисляем перпендикулярное направление: курс торпеды ± 90°
+            escapeAngleRad = torpedoDirectionRad + (evasionSide * Math.PI / 2);
+            escapeAngleDeg = (Phaser.Math.RadToDeg(escapeAngleRad) + 360) % 360;
+        } else {
+            // Для других угроз - противоположное направление (180°)
+            // Phaser.Math.Angle.Between возвращает математический угол в радианах
+            const angleToThreatMath = Phaser.Math.Angle.Between(
+                fromPos.x, fromPos.y,
+                threatPos.x, threatPos.y
+            );
+            // Конвертируем в навигационный угол: navRad = mathRad + PI/2
+            const angleToThreatNav = angleToThreatMath + Math.PI / 2;
+            // Противоположное направление: +180° (PI радиан)
+            escapeAngleRad = angleToThreatNav + Math.PI;
+            escapeAngleDeg = (Phaser.Math.RadToDeg(escapeAngleRad) + 360) % 360;
+        }
         
-        const escapeX = fromPos.x + Math.cos(escapeAngleRad) * escapeDistance;
-        const escapeY = fromPos.y + Math.sin(escapeAngleRad) * escapeDistance;
+        // Вычисляем точку уклонения в навигационной системе координат
+        // X = sin(angleRad), Y = -cos(angleRad) для навигационной системы
+        const escapeX = fromPos.x + Math.sin(escapeAngleRad) * escapeDistance;
+        const escapeY = fromPos.y - Math.cos(escapeAngleRad) * escapeDistance;
         
         return {
             angle: escapeAngleRad,
             angleDeg: escapeAngleDeg,
             point: new Phaser.Math.Vector2(escapeX, escapeY)
         };
+    }
+    
+    /**
+     * Очищает сохраненные направления уклонения для неактивных торпед
+     * Вызывается периодически для очистки памяти
+     */
+    protected cleanupTorpedoEvasionDirections(): void {
+        if (!this.scene) return;
+        
+        // Удаляем записи для неактивных торпед
+        // Ищем Vehicle среди всех объектов сцены
+        const children = this.scene.children.list as Vehicle[];
+        
+        for (const [torpedoId, _] of this.torpedoEvasionDirections.entries()) {
+            const torpedo = children.find(v => v instanceof Vehicle && v.id === torpedoId && v instanceof Torpedo) as Torpedo | undefined;
+            if (!torpedo || !torpedo.active) {
+                this.torpedoEvasionDirections.delete(torpedoId);
+            }
+        }
     }
     
     /**

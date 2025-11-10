@@ -268,7 +268,8 @@ export class MerchantShipStrategy extends BaseAIStrategy {
         const shipPos = new Phaser.Math.Vector2(ship.x, ship.y);
         
         // Вычисляем направление убегания (общая функция)
-        const escapeInfo = this.calculateEscapeDirection(shipPos, threatPos, 800);
+        // Передаем объект угрозы для определения типа и курса (для торпед)
+        const escapeInfo = this.calculateEscapeDirection(shipPos, threatPos, 800, threatInfo.targetVehicle);
         
         // Конвертируем в логические координаты
         const escapeLogicalPos = CoordUtils.phaserToLogical(escapeInfo.point);
@@ -326,20 +327,21 @@ export class MerchantShipStrategy extends BaseAIStrategy {
         if (this.threatId === null || !this.lastKnownThreatPosition) return;
 
         const shipPos = new Phaser.Math.Vector2(ship.x, ship.y);
+        
+        // Получаем объект угрозы для передачи в calculateEscapeDirection
+        const threatVehicle = ship.perceivedTargets.get(this.threatId)?.targetVehicle;
 
-        // Добавляем случайный offset к углу уклонения для непредсказуемости
-        const randomOffset = Phaser.Math.Between(-20, 20); // ±20 градусов
+        // Вычисляем направление убегания (общая функция)
+        // Передаем объект угрозы для определения типа и курса (для торпед)
         const escapeInfo = this.calculateEscapeDirection(
             shipPos,
             this.lastKnownThreatPosition,
-            800
+            800,
+            threatVehicle
         );
 
-        // Применяем offset к углу
-        const escapeAngleRad = escapeInfo.angle + Phaser.Math.DegToRad(randomOffset);
-        const escapeX = shipPos.x + Math.cos(escapeAngleRad) * 800;
-        const escapeY = shipPos.y + Math.sin(escapeAngleRad) * 800;
-        const adjustedEscapePoint = new Phaser.Math.Vector2(escapeX, escapeY);
+        // Используем вычисленную точку уклонения напрямую
+        const adjustedEscapePoint = escapeInfo.point;
 
         // Конвертируем в логические координаты
         const logicalPos = CoordUtils.phaserToLogical(adjustedEscapePoint);
@@ -357,9 +359,13 @@ export class MerchantShipStrategy extends BaseAIStrategy {
         // Увеличиваем скорость для уклонения
         ship.setPower(Vehicle.POWER_3);  // Уменьшено для теста
 
+        // Вычисляем offset (разница между текущим направлением корабля и направлением уклонения)
+        const shipDirection = ship.getDirection();
+        const offsetAngle = Phaser.Math.Angle.ShortestBetween(shipDirection, escapeInfo.angleDeg);
+
         // Логируем действие
         const distance = Phaser.Math.Distance.Between(shipPos.x, shipPos.y, this.lastKnownThreatPosition.x, this.lastKnownThreatPosition.y);
-        AILogger.log(ship, this.name, "Evading Threat", `Evading from Vehicle ${this.threatId} at distance ${distance.toFixed(0)}m with offset ${randomOffset}°`, LogLevel.INFO, { ...context, evadeDistance: distance, offset: randomOffset });
+        AILogger.log(ship, this.name, "Evading Threat", `Evading from Vehicle ${this.threatId} at distance ${distance.toFixed(0)}m with offset ${offsetAngle.toFixed(0)}°`, LogLevel.INFO, { ...context, evadeDistance: distance, offset: offsetAngle });
     }
 }
 

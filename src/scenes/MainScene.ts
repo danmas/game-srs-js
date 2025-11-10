@@ -95,6 +95,20 @@ export class MainScene extends Phaser.Scene {
     super({ key: 'MainScene' });
   }
   
+  // Хранилище для имени сценария
+  private selectedScenarioName: string = 'scenario_test_1';
+
+  /**
+   * Инициализация сцены (вызывается перед create)
+   * @param data Данные, переданные из предыдущей сцены
+   */
+  init(data?: { scenarioName?: string }): void {
+    // Получаем имя сценария из данных или используем значение по умолчанию
+    if (data?.scenarioName) {
+      this.selectedScenarioName = data.scenarioName;
+    }
+  }
+
   /**
    * Предзагрузка ресурсов
    */
@@ -174,7 +188,8 @@ export class MainScene extends Phaser.Scene {
     this.createUI();
     
     // Инициализируем игру, но не запускаем автоматически
-    this.initGame();
+    // Используем имя сценария, полученное в init()
+    this.initGame(this.selectedScenarioName);
     
     // Обновляем настройки камер после создания всех объектов
     this.updateCamerasConfig();
@@ -293,8 +308,9 @@ export class MainScene extends Phaser.Scene {
   
   /**
    * Инициализация игры без запуска
+   * @param scenarioName Имя сценария для загрузки (по умолчанию 'scenario_test_1')
    */
-  initGame(): void {
+  initGame(scenarioName: string = 'scenario_test_1'): void {
     // Сбрасываем статистику
     Statistic.reset();
     
@@ -315,8 +331,7 @@ export class MainScene extends Phaser.Scene {
     
     // Загружаем сценарий, но не запускаем игру
     if (this.scenarioManager) {
-      this.scenarioManager.loadScenario('scenario_test_1');
-      // this.scenarioManager.loadScenario('scenario_2');
+      this.scenarioManager.loadScenario(scenarioName);
       this.scenarioManager.showMissionGoal();
       
       // Центрируем камеру на позиции игрока и устанавливаем myShip как выбранный для информера

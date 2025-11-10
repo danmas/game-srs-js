@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { MainScene } from './scenes/MainScene';
+import { MenuScene } from './scenes/MenuScene';
 import { Settings } from './utils/Settings';
 
 // Логируем версию сборки в консоль браузера
@@ -47,7 +48,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: Settings.DEBUG
     }
   },
-  scene: [MainScene],
+  scene: [MenuScene, MainScene],
   render: {
     pixelArt: false,
     antialias: true,
